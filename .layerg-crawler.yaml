@@ -1,0 +1,18 @@
+# DB info
+COCKROACH_DB_DRIVER: postgres
+COCKROACH_DB_URL: postgres://root:@localhost:26257/marketplace_crawler?sslmode=disable
+COCKROACH_DB_NAME: marketplace_crawler
+POSTGRES_DB_URL: postgres://postgres:postgres@localhost:5432/marketplace?sslmode=disable
+POSTGRES_DB_NAME: marketplace
+
+REDIS_DB_URL: localhost:6379
+REDIS_DB_PASSWORD:
+REDIS_DB: 0
+
+# App configs
+LOG_LEVEL: DEV
+GIN_MODE: release
+API_KEY_HEADER_NAME: X-API-KEY
+API_PORT: ":8085"
+APP_ID: f3e3bf76-62dc-42a7-ad0d-ef9033bc13a5
+API_SECRET: default

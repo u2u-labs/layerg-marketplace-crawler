@@ -1,0 +1,68 @@
+version: "3.5"
+
+services:
+  crawler:
+    image: u2labs/layerg-crawler:latest
+    build:
+      context: .
+    container_name: layerg-crawler
+    restart: always
+    depends_on:
+      - crdb
+    command: "layerg-crawler --config config.yaml"
+    volumes:
+      - ./config.yaml:/go/bin/config.yaml
+    logging:
+      driver: "json-file"
+      options:
+        max-size: 300m
+  api:
+    image: u2labs/layerg-crawler:latest
+    build:
+      context: .
+    container_name: layerg-api
+    restart: always
+    depends_on:
+      - crdb
+    ports:
+      - 8085:8085
+    command: "layerg-crawler api --config config.yaml"
+    volumes:
+      - ./config.yaml:/go/bin/config.yaml
+    logging:
+      driver: "json-file"
+      options:
+        max-size: 300m
+  worker:
+    image: u2labs/layerg-crawler:latest
+    build:
+      context: .
+    container_name: layerg-worker
+    restart: always
+    depends_on:
+      - crdb
+    command: "layerg-crawler worker --config config.yaml"
+    volumes:
+      - ./config.yaml:/go/bin/config.yaml
+    logging:
+      driver: "json-file"
+      options:
+        max-size: 300m
+  crdb:
+    image: cockroachdb/cockroach:v24.2.1
+    ports:
+      - "26257:26257"
+      - "8080:8080"
+    command: start-single-node --insecure
+    volumes:
+      - ../data/crdb:/cockroach/cockroach-data
+  redis:
+    image: bitnami/redis:latest
+    environment:
+      # ALLOW_EMPTY_PASSWORD is recommended only for development.
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
+    ports:
+      - "6379:6379"
+    volumes:
+      - ../redis_data:/bitnami/redis/data
