@@ -9,5 +9,5 @@ const (
 	ProcessBatchBlocksLimit             = 100
 	NewAssetChannel                     = "new_asset"
 	MaxRetriesAttempt                   = 4
-	MaxScanLogsLimit                    = 1000
+	MaxScanLogsLimit                    = 800
 )

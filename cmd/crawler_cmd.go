@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/u2u-labs/layerg-crawler/cmd/helpers"
 	"github.com/u2u-labs/layerg-crawler/cmd/types"
@@ -326,18 +328,29 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		}
 	}
 
+	// get collection
+	col, err := dbStore.MpQueries.GetCollectionByAddressAndChainId(ctx, dbCon.GetCollectionByAddressAndChainIdParams{
+		Address: sql.NullString{String: strings.ToLower(payload.CollectionAddress), Valid: true},
+		ChainId: int64(payload.ChainID),
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
 	// upsert nft to layerg marketplace db
 	upsertedNft, err := dbStore.MpQueries.UpsertNFT(ctx, dbCon.UpsertNFTParams{
-		Column1:        nil,
-		TokenId:        payload.TokenID,
+		ID:             payload.TokenID,
 		Name:           name,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 		Status:         "SUCCESS",
 		TokenUri:       ipfsUrl,
 		TxCreationHash: payload.TxHash,
-		CreatorId:      sql.NullString{Valid: true, String: ""},
-		CollectionId:   payload.CollectionAddress,
+		CreatorId:      uuid.NullUUID{},
+		CollectionId:   col.ID,
 		ChainId:        int64(payload.ChainID),
 		Image:          sql.NullString{Valid: true, String: image},
 		Description:    sql.NullString{Valid: true, String: description},

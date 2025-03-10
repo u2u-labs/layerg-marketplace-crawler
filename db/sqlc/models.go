@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 )
 
 type AssetType string
@@ -181,6 +182,45 @@ type Chain struct {
 	BlockTime   int32  `json:"blockTime"`
 }
 
+type Collection struct {
+	ID             uuid.UUID             `json:"id"`
+	TxCreationHash string                `json:"txCreationHash"`
+	Name           string                `json:"name"`
+	NameSlug       sql.NullString        `json:"nameSlug"`
+	Symbol         string                `json:"symbol"`
+	Description    sql.NullString        `json:"description"`
+	Address        sql.NullString        `json:"address"`
+	ShortUrl       sql.NullString        `json:"shortUrl"`
+	Metadata       sql.NullString        `json:"metadata"`
+	IsU2U          bool                  `json:"isU2U"`
+	Status         interface{}           `json:"status"`
+	Type           interface{}           `json:"type"`
+	CategoryId     sql.NullInt32         `json:"categoryId"`
+	CreatedAt      time.Time             `json:"createdAt"`
+	UpdatedAt      time.Time             `json:"updatedAt"`
+	CoverImage     sql.NullString        `json:"coverImage"`
+	Avatar         sql.NullString        `json:"avatar"`
+	ProjectId      uuid.NullUUID         `json:"projectId"`
+	IsVerified     bool                  `json:"isVerified"`
+	FloorPrice     int64                 `json:"floorPrice"`
+	Floor          float64               `json:"floor"`
+	FloorWei       string                `json:"floorWei"`
+	IsActive       bool                  `json:"isActive"`
+	FlagExtend     sql.NullBool          `json:"flagExtend"`
+	IsSync         sql.NullBool          `json:"isSync"`
+	SubgraphUrl    sql.NullString        `json:"subgraphUrl"`
+	LastTimeSync   sql.NullInt32         `json:"lastTimeSync"`
+	MetricPoint    sql.NullInt64         `json:"metricPoint"`
+	MetricDetail   pqtype.NullRawMessage `json:"metricDetail"`
+	MetadataJson   pqtype.NullRawMessage `json:"metadataJson"`
+	GameId         sql.NullString        `json:"gameId"`
+	Source         sql.NullString        `json:"source"`
+	CategoryG      pqtype.NullRawMessage `json:"categoryG"`
+	Vol            float64               `json:"vol"`
+	VolumeWei      string                `json:"volumeWei"`
+	ChainId        int64                 `json:"chainId"`
+}
+
 type Erc1155CollectionAsset struct {
 	ID         uuid.UUID      `json:"id"`
 	ChainID    int32          `json:"chainId"`
@@ -230,25 +270,25 @@ type EvmAccount struct {
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
-type Nft struct {
-	Uid            uuid.UUID       `json:"uid"`
-	TokenId        string          `json:"tokenId"`
+type NFT struct {
+	ID             string          `json:"id"`
 	Name           string          `json:"name"`
 	CreatedAt      time.Time       `json:"createdAt"`
 	UpdatedAt      time.Time       `json:"updatedAt"`
 	Status         string          `json:"status"`
 	TokenUri       string          `json:"tokenUri"`
 	TxCreationHash string          `json:"txCreationHash"`
-	CreatorId      sql.NullString  `json:"creatorId"`
-	CollectionId   string          `json:"collectionId"`
-	ChainId        int64           `json:"chainId"`
+	CreatorId      uuid.NullUUID   `json:"creatorId"`
+	CollectionId   uuid.UUID       `json:"collectionId"`
 	Image          sql.NullString  `json:"image"`
+	IsActive       bool            `json:"isActive"`
 	Description    sql.NullString  `json:"description"`
 	AnimationUrl   sql.NullString  `json:"animationUrl"`
 	NameSlug       sql.NullString  `json:"nameSlug"`
 	MetricPoint    int64           `json:"metricPoint"`
 	MetricDetail   json.RawMessage `json:"metricDetail"`
 	Source         sql.NullString  `json:"source"`
+	ChainId        int64           `json:"chainId"`
 }
 
 type OnchainHistory struct {
