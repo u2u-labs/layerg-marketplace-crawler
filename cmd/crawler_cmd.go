@@ -351,7 +351,6 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		TxCreationHash: payload.TxHash,
 		CreatorId:      uuid.NullUUID{},
 		CollectionId:   col.ID,
-		ChainId:        int64(payload.ChainID),
 		Image:          sql.NullString{Valid: true, String: image},
 		Description:    sql.NullString{Valid: true, String: description},
 		AnimationUrl:   sql.NullString{Valid: true, String: animationUrl},
@@ -359,6 +358,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		MetricPoint:    0,
 		MetricDetail:   []byte("{}"),
 		Source:         sql.NullString{Valid: true, String: "crawler"},
+		OwnerId:        payload.Owner,
 	})
 
 	if err != nil {
@@ -366,7 +366,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 	}
 
 	logger.Infow("Upserted NFT successfully", "tokenID", payload.TokenID, "collection", upsertedNft.CollectionId,
-		"chainId", upsertedNft.ChainId)
+		"chainId", payload.ChainID)
 	return nil
 }
 

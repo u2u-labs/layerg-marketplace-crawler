@@ -22,11 +22,9 @@ CREATE TABLE IF NOT EXISTS "NFT"
       "UserMetric": 0
     }'::jsonb,
     source           TEXT,
+    "ownerId"        TEXT      NOT NULL,
     UNIQUE ("id", "collectionId")
 );
-
-ALTER TABLE "NFT"
-    ADD COLUMN IF NOT EXISTS "chainId" BIGINT NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS nft_collection_id ON "NFT" ("collectionId");
 

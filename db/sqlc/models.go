@@ -288,7 +288,7 @@ type NFT struct {
 	MetricPoint    int64           `json:"metricPoint"`
 	MetricDetail   json.RawMessage `json:"metricDetail"`
 	Source         sql.NullString  `json:"source"`
-	ChainId        int64           `json:"chainId"`
+	OwnerId        string          `json:"ownerId"`
 }
 
 type OnchainHistory struct {

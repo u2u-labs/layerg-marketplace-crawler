@@ -1,11 +1,11 @@
 -- name: UpsertNFT :one
 INSERT INTO "NFT" ("id", name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash",
-                   "creatorId", "collectionId", "chainId", image, description, "animationUrl",
-                   "nameSlug", "metricPoint", "metricDetail", source)
+                   "creatorId", "collectionId", image, description, "animationUrl",
+                   "nameSlug", "metricPoint", "metricDetail", source, "ownerId")
 VALUES ($1, $2, $3, $4, $5, $6, $7,
         $8, $9, $10, $11, $12, $13,
         $14, $15, $16, $17)
-ON CONFLICT ("id", "collectionId", "chainId")
+ON CONFLICT ("id", "collectionId")
     DO UPDATE SET name             = EXCLUDED.name,
                   "updatedAt"      = CURRENT_TIMESTAMP,
                   status           = EXCLUDED.status,
@@ -17,10 +17,12 @@ ON CONFLICT ("id", "collectionId", "chainId")
                   "animationUrl"   = EXCLUDED."animationUrl",
                   "nameSlug"       = EXCLUDED."nameSlug",
                   "metricPoint"    = EXCLUDED."metricPoint",
-                  source           = EXCLUDED.source
+                  source           = EXCLUDED.source,
+                  "ownerId"        = EXCLUDED."ownerId"
 RETURNING *;
 
 -- name: GetCollectionByAddressAndChainId :one
 SELECT *
 FROM "Collection"
-WHERE "address" ILIKE $1 AND "chainId" = $2;
+WHERE "address" ILIKE $1
+  AND "chainId" = $2;

@@ -17,7 +17,8 @@ import (
 const getCollectionByAddressAndChainId = `-- name: GetCollectionByAddressAndChainId :one
 SELECT id, "txCreationHash", name, "nameSlug", symbol, description, address, "shortUrl", metadata, "isU2U", status, type, "categoryId", "createdAt", "updatedAt", "coverImage", avatar, "projectId", "isVerified", "floorPrice", floor, "floorWei", "isActive", "flagExtend", "isSync", "subgraphUrl", "lastTimeSync", "metricPoint", "metricDetail", "metadataJson", "gameId", source, "categoryG", vol, "volumeWei", "chainId"
 FROM "Collection"
-WHERE "address" ILIKE $1 AND "chainId" = $2
+WHERE "address" ILIKE $1
+  AND "chainId" = $2
 `
 
 type GetCollectionByAddressAndChainIdParams struct {
@@ -71,12 +72,12 @@ func (q *Queries) GetCollectionByAddressAndChainId(ctx context.Context, arg GetC
 
 const upsertNFT = `-- name: UpsertNFT :one
 INSERT INTO "NFT" ("id", name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash",
-                   "creatorId", "collectionId", "chainId", image, description, "animationUrl",
-                   "nameSlug", "metricPoint", "metricDetail", source)
+                   "creatorId", "collectionId", image, description, "animationUrl",
+                   "nameSlug", "metricPoint", "metricDetail", source, "ownerId")
 VALUES ($1, $2, $3, $4, $5, $6, $7,
         $8, $9, $10, $11, $12, $13,
         $14, $15, $16, $17)
-ON CONFLICT ("id", "collectionId", "chainId")
+ON CONFLICT ("id", "collectionId")
     DO UPDATE SET name             = EXCLUDED.name,
                   "updatedAt"      = CURRENT_TIMESTAMP,
                   status           = EXCLUDED.status,
@@ -88,8 +89,9 @@ ON CONFLICT ("id", "collectionId", "chainId")
                   "animationUrl"   = EXCLUDED."animationUrl",
                   "nameSlug"       = EXCLUDED."nameSlug",
                   "metricPoint"    = EXCLUDED."metricPoint",
-                  source           = EXCLUDED.source
-RETURNING id, name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash", "creatorId", "collectionId", image, "isActive", description, "animationUrl", "nameSlug", "metricPoint", "metricDetail", source, "chainId"
+                  source           = EXCLUDED.source,
+                  "ownerId"        = EXCLUDED."ownerId"
+RETURNING id, name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash", "creatorId", "collectionId", image, "isActive", description, "animationUrl", "nameSlug", "metricPoint", "metricDetail", source, "ownerId"
 `
 
 type UpsertNFTParams struct {
@@ -102,7 +104,6 @@ type UpsertNFTParams struct {
 	TxCreationHash string          `json:"txCreationHash"`
 	CreatorId      uuid.NullUUID   `json:"creatorId"`
 	CollectionId   uuid.UUID       `json:"collectionId"`
-	ChainId        int64           `json:"chainId"`
 	Image          sql.NullString  `json:"image"`
 	Description    sql.NullString  `json:"description"`
 	AnimationUrl   sql.NullString  `json:"animationUrl"`
@@ -110,6 +111,7 @@ type UpsertNFTParams struct {
 	MetricPoint    int64           `json:"metricPoint"`
 	MetricDetail   json.RawMessage `json:"metricDetail"`
 	Source         sql.NullString  `json:"source"`
+	OwnerId        string          `json:"ownerId"`
 }
 
 func (q *Queries) UpsertNFT(ctx context.Context, arg UpsertNFTParams) (NFT, error) {
@@ -123,7 +125,6 @@ func (q *Queries) UpsertNFT(ctx context.Context, arg UpsertNFTParams) (NFT, erro
 		arg.TxCreationHash,
 		arg.CreatorId,
 		arg.CollectionId,
-		arg.ChainId,
 		arg.Image,
 		arg.Description,
 		arg.AnimationUrl,
@@ -131,6 +132,7 @@ func (q *Queries) UpsertNFT(ctx context.Context, arg UpsertNFTParams) (NFT, erro
 		arg.MetricPoint,
 		arg.MetricDetail,
 		arg.Source,
+		arg.OwnerId,
 	)
 	var i NFT
 	err := row.Scan(
@@ -151,7 +153,7 @@ func (q *Queries) UpsertNFT(ctx context.Context, arg UpsertNFTParams) (NFT, erro
 		&i.MetricPoint,
 		&i.MetricDetail,
 		&i.Source,
-		&i.ChainId,
+		&i.OwnerId,
 	)
 	return i, err
 }
