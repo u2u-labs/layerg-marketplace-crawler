@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS "NFT"
     UNIQUE ("id", "collectionId")
 );
 
-CREATE INDEX IF NOT EXISTS nft_collection_id ON "NFT" ("collectionId");
+--CREATE INDEX IF NOT EXISTS nft_collection_id ON "NFT" ("collectionId");
 
 CREATE TABLE IF NOT EXISTS "Collection"
 (
@@ -95,15 +95,15 @@ CREATE TABLE IF NOT EXISTS "Collection"
     CONSTRAINT "Collection_pkey" PRIMARY KEY ("id")
 );
 
-ALTER TABLE "Collection"
-    ADD COLUMN IF NOT EXISTS "chainId" BIGINT NOT NULL DEFAULT 0;
+--ALTER TABLE "Collection"
+--    ADD COLUMN IF NOT EXISTS "chainId" BIGINT NOT NULL DEFAULT 0;
 
 -- +goose StatementEnd
 
 -- +goose Down
 -- +goose StatementBegin
-DROP INDEX IF EXISTS nft_collection_id;
+--DROP INDEX IF EXISTS nft_collection_id;
 
-DROP TABLE IF EXISTS "NFT";
+--DROP TABLE IF EXISTS "NFT";
 
 -- +goose StatementEnd
