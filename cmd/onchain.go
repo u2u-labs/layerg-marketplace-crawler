@@ -1286,10 +1286,15 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 		ChainID:   contractType[chain.ID][l.Address.Hex()].ChainID,
 		TxHash:    l.TxHash.Hex(),
 	})
+	if err != nil {
+		sugar.Errorw("Failed to create order", "err", err)
+		return err
+	}
 
 	// publish to redis queue
 	if rc != nil {
-		_ = rc.Publish(ctx, "order_queue", order).Err()
+		orderBytes, _ := json.Marshal(order)
+		_ = rc.Publish(ctx, config.FillOrderChannel, orderBytes).Err()
 	}
 
 	return nil
@@ -1329,10 +1334,15 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 		ChainID:   contractType[chain.ID][l.Address.Hex()].ChainID,
 		TxHash:    l.TxHash.Hex(),
 	})
+	if err != nil {
+		sugar.Errorw("Failed to create order", "err", err)
+		return err
+	}
 
 	// publish to redis queue
 	if rc != nil {
-		_ = rc.Publish(ctx, "order_queue", order).Err()
+		orderBytes, _ := json.Marshal(order)
+		_ = rc.Publish(ctx, config.CancelOrderChannel, orderBytes).Err()
 	}
 
 	return nil

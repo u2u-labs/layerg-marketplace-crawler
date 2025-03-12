@@ -10,4 +10,6 @@ const (
 	NewAssetChannel                     = "new_asset"
 	MaxRetriesAttempt                   = 4
 	MaxScanLogsLimit                    = 800
+	FillOrderChannel                    = "fill_order"
+	CancelOrderChannel                  = "cancel_order"
 )
