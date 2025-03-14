@@ -12,4 +12,5 @@ const (
 	MaxScanLogsLimit                    = 800
 	FillOrderChannel                    = "fill_order"
 	CancelOrderChannel                  = "cancel_order"
+	PusherChannelOrder                  = "marketplace_order"
 )

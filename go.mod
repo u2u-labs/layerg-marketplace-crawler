@@ -32,6 +32,7 @@ require (
 	github.com/ethereum/go-verkle v0.2.2 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
+	github.com/pusher/pusher-http-go/v5 v5.1.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/supranational/blst v0.3.14 // indirect
 	golang.org/x/sync v0.12.0 // indirect
