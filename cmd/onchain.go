@@ -21,6 +21,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 	"github.com/u2u-labs/layerg-crawler/cmd/helpers"
+	"github.com/u2u-labs/layerg-crawler/cmd/libs"
 	"github.com/u2u-labs/layerg-crawler/cmd/types"
 	"github.com/u2u-labs/layerg-crawler/cmd/utils"
 	"github.com/u2u-labs/layerg-crawler/config"
@@ -1293,8 +1294,11 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 
 	// publish to redis queue
 	if rc != nil {
-		orderBytes, _ := json.Marshal(order)
-		_ = rc.Publish(ctx, config.FillOrderChannel, orderBytes).Err()
+		go func() {
+			orderBytes, _ := json.Marshal(order)
+			_ = rc.Publish(ctx, config.FillOrderChannel, orderBytes).Err()
+			_ = libs.PusherClient.Trigger(config.PusherChannelOrder, config.FillOrderChannel, orderBytes)
+		}()
 	}
 
 	return nil
@@ -1341,8 +1345,11 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 
 	// publish to redis queue
 	if rc != nil {
-		orderBytes, _ := json.Marshal(order)
-		_ = rc.Publish(ctx, config.CancelOrderChannel, orderBytes).Err()
+		go func() {
+			orderBytes, _ := json.Marshal(order)
+			_ = rc.Publish(ctx, config.CancelOrderChannel, orderBytes).Err()
+			_ = libs.PusherClient.Trigger(config.PusherChannelOrder, config.CancelOrderChannel, orderBytes)
+		}()
 	}
 
 	return nil
