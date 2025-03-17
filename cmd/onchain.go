@@ -1302,7 +1302,7 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 			_ = rc.Publish(ctx, config.FillOrderChannel, orderBytes).Err()
 			orderPayload := map[string]any{
 				"order": order,
-				"type":  "fillOrder",
+				"type":  config.FillOrderChannel,
 			}
 			payloadBytes, _ := json.Marshal(orderPayload)
 
@@ -1373,7 +1373,7 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 			_ = rc.Publish(ctx, config.CancelOrderChannel, orderBytes).Err()
 			orderPayload := map[string]any{
 				"order": order,
-				"type":  "fillOrder",
+				"type":  config.CancelOrderChannel,
 			}
 			payloadBytes, _ := json.Marshal(orderPayload)
 
