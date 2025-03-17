@@ -47,6 +47,14 @@ func startWorker(cmd *cobra.Command, args []string) {
 	if err != nil {
 		sugar.Errorw("Failed to connect to database", "err", err)
 	}
+	mkpConn, err := sql.Open(
+		viper.GetString("COCKROACH_DB_DRIVER"), // same postgres driver
+		viper.GetString("POSTGRES_DB_URL"),
+	)
+	if err != nil {
+		sugar.Errorw("Could not connect to database", "err", err)
+	}
+	dbStore := dbCon.NewDBManager(conn, mkpConn)
 
 	sqlDb := dbCon.New(conn)
 
@@ -75,10 +83,16 @@ func startWorker(cmd *cobra.Command, args []string) {
 		sugar.Errorw("Failed to parse EXCHANGE ABI", "err", err)
 	}
 
-	InitBackfillProcessor(ctx, sugar, sqlDb, rdb, queueClient)
+	InitBackfillProcessor(ctx, sugar, sqlDb, rdb, queueClient, dbStore)
 }
 
-func InitBackfillProcessor(ctx context.Context, sugar *zap.SugaredLogger, q *dbCon.Queries, rdb *redis.Client, queueClient *asynq.Client) error {
+func InitBackfillProcessor(ctx context.Context, sugar *zap.SugaredLogger, q *dbCon.Queries, rdb *redis.Client, queueClient *asynq.Client, dbStore *dbCon.DBManager) error {
+	err := crawlSupportedChains(ctx, sugar, dbStore, rdb, false)
+	if err != nil {
+		sugar.Errorw("Error init supported chains", "err", err)
+		return err
+	}
+
 	// Get all chains
 	chains, err := q.GetAllChain(ctx)
 	if err != nil {
@@ -101,7 +115,7 @@ func InitBackfillProcessor(ctx context.Context, sugar *zap.SugaredLogger, q *dbC
 		// mux maps a type to a handler
 		mux := asynq.NewServeMux()
 		taskName := BackfillCollection + ":" + strconv.Itoa(int(chain.ID))
-		mux.Handle(taskName, NewBackfillProcessor(sugar, client, q, &chain, rdb))
+		mux.Handle(taskName, NewBackfillProcessor(sugar, client, q, &chain, rdb, dbStore))
 
 		if err := srv.Run(mux); err != nil {
 			log.Fatalf("could not run server: %v", err)
@@ -209,7 +223,7 @@ func (p *BackfillProcessor) ProcessTask(ctx context.Context, t *asynq.Task) erro
 			toScanBlock = int64(scannedBlock)
 		}
 	case dbCon.AssetTypeORDER:
-		handleExchangeBackfill(ctx, p.sugar, p.q, p.ethClient, p.chain, logs)
+		handleExchangeBackfill(ctx, p.sugar, p.q, p.ethClient, p.chain, logs, p.rdb)
 	}
 
 	bf.CurrentBlock = toScanBlock
@@ -234,9 +248,10 @@ type BackfillProcessor struct {
 	q         *dbCon.Queries
 	chain     *dbCon.Chain
 	rdb       *redis.Client
+	dbStore   *dbCon.DBManager
 }
 
-func NewBackfillProcessor(sugar *zap.SugaredLogger, ethClient *ethclient.Client, q *dbCon.Queries, chain *dbCon.Chain, rdb *redis.Client) *BackfillProcessor {
+func NewBackfillProcessor(sugar *zap.SugaredLogger, ethClient *ethclient.Client, q *dbCon.Queries, chain *dbCon.Chain, rdb *redis.Client, dbStore *dbCon.DBManager) *BackfillProcessor {
 	sugar.Infow("Initiated new chain backfill, start crawling", "chain", chain.Chain)
-	return &BackfillProcessor{sugar, ethClient, q, chain, rdb}
+	return &BackfillProcessor{sugar, ethClient, q, chain, rdb, dbStore}
 }

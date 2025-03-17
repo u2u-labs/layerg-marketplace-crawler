@@ -13,9 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	types2 "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	u2u "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	utypes "github.com/ethereum/go-ethereum/core/types"
@@ -24,7 +21,6 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 	"github.com/u2u-labs/layerg-crawler/cmd/helpers"
-	"github.com/u2u-labs/layerg-crawler/cmd/libs"
 	"github.com/u2u-labs/layerg-crawler/cmd/types"
 	"github.com/u2u-labs/layerg-crawler/cmd/utils"
 	"github.com/u2u-labs/layerg-crawler/config"
@@ -38,7 +34,7 @@ type EvmRPCClient struct {
 	RpcClient *rpc.Client
 }
 
-func StartChainCrawler(ctx context.Context, sugar *zap.SugaredLogger, client *EvmRPCClient, dbConn *sql.DB, q *db.Queries, chain *db.Chain, rdb *redis.Client) {
+func StartChainCrawler(ctx context.Context, sugar *zap.SugaredLogger, client *EvmRPCClient, dbConn *db.DBManager, chain *db.Chain, rdb *redis.Client) {
 	sugar.Infow("Start chain crawler", "chain", chain)
 	timer := time.NewTimer(time.Duration(chain.BlockTime) * time.Millisecond)
 	defer timer.Stop()
@@ -49,7 +45,7 @@ func StartChainCrawler(ctx context.Context, sugar *zap.SugaredLogger, client *Ev
 			return
 		case <-timer.C:
 			// Process new blocks
-			err := ProcessLatestBlocks(ctx, sugar, client, dbConn, q, chain, rdb)
+			err := ProcessLatestBlocks(ctx, sugar, client, dbConn, chain, rdb)
 			if err != nil {
 				sugar.Errorw("Error processing latest blocks", "err", err)
 				return
@@ -86,7 +82,7 @@ func AddBackfillCrawlerTask(ctx context.Context, sugar *zap.SugaredLogger, clien
 	}
 }
 
-func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *EvmRPCClient, dbConn *sql.DB, q *db.Queries, chain *db.Chain, rdb *redis.Client) error {
+func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *EvmRPCClient, dbConn *db.DBManager, chain *db.Chain, rdb *redis.Client) error {
 	// Get latest block number with retries
 	latest, err := helpers.RetryWithBackoff(ctx, sugar, config.MaxRetriesAttempt, "fetch latest block number", func() (uint64, error) {
 		return client.EthClient.BlockNumber(ctx)
@@ -99,14 +95,14 @@ func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *
 	c, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	tx, err := dbConn.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	tx, err := dbConn.CrawlerDB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		sugar.Errorw("Failed to start transaction", "err", err)
 		return err
 	}
 	defer tx.Rollback()
 
-	qtx := q.WithTx(tx)
+	qtx := dbConn.CrQueries.WithTx(tx)
 	latestUpdatedBlock := chain.LatestBlock
 	// Process each block between
 	for i := chain.LatestBlock + 1; i <= int64(latest) && i <= chain.LatestBlock+config.ProcessBatchBlocksLimit; i++ {
@@ -1300,27 +1296,6 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 		go func() {
 			orderBytes, _ := json.Marshal(order)
 			_ = rc.Publish(ctx, config.FillOrderChannel, orderBytes).Err()
-			orderPayload := map[string]any{
-				"order": order,
-				"type":  config.FillOrderChannel,
-			}
-			payloadBytes, _ := json.Marshal(orderPayload)
-
-			output, err := libs.SqsClient.SendMessage(ctx, &sqs.SendMessageInput{
-				MessageBody: aws.String(string(payloadBytes)),
-				QueueUrl:    aws.String(libs.QUEUE_URL),
-				MessageSystemAttributes: map[string]types2.MessageSystemAttributeValue{
-					"Priority": {
-						DataType:    aws.String("String"),
-						StringValue: aws.String("High"),
-					},
-				},
-			})
-			if err != nil {
-				sugar.Errorw("Failed to send message to SQS", "err", err)
-				return
-			}
-			sugar.Infow("SQS output", "message_id", output.MessageId)
 		}()
 	}
 
@@ -1371,27 +1346,6 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 		go func() {
 			orderBytes, _ := json.Marshal(order)
 			_ = rc.Publish(ctx, config.CancelOrderChannel, orderBytes).Err()
-			orderPayload := map[string]any{
-				"order": order,
-				"type":  config.CancelOrderChannel,
-			}
-			payloadBytes, _ := json.Marshal(orderPayload)
-
-			output, err := libs.SqsClient.SendMessage(ctx, &sqs.SendMessageInput{
-				MessageBody: aws.String(string(payloadBytes)),
-				QueueUrl:    aws.String(libs.QUEUE_URL),
-				MessageSystemAttributes: map[string]types2.MessageSystemAttributeValue{
-					"Priority": {
-						DataType:    aws.String("String"),
-						StringValue: aws.String("High"),
-					},
-				},
-			})
-			if err != nil {
-				sugar.Errorw("Failed to send message to SQS", "err", err)
-				return
-			}
-			sugar.Infow("SQS output", "message_id", output.MessageId)
 		}()
 	}
 
@@ -1399,13 +1353,16 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 }
 
 func handleExchangeBackfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.Queries, client *ethclient.Client,
-	chain *db.Chain, logs []utypes.Log) error {
+	chain *db.Chain, logs []utypes.Log, rc *redis.Client) error {
 	if len(logs) == 0 {
 		return nil
 	}
 
 	for _, l := range logs {
-		blk, err := client.BlockByNumber(ctx, big.NewInt(int64(l.BlockNumber)))
+		blk, err := helpers.RetryWithBackoff(ctx, sugar, config.MaxRetriesAttempt, "fetch latest block number", func() (*utypes.Block, error) {
+			return client.BlockByNumber(ctx, big.NewInt(int64(l.BlockNumber)))
+		})
+		//blk, err := client.BlockByNumber(ctx, big.NewInt(int64(l.BlockNumber)))
 		if err != nil {
 			sugar.Errorw("Failed to get block by number", "err", err)
 			return err
@@ -1414,9 +1371,9 @@ func handleExchangeBackfill(ctx context.Context, sugar *zap.SugaredLogger, q *db
 
 		switch l.Topics[0].Hex() {
 		case utils.FillOrderSig:
-			_ = handleFillOrder(ctx, sugar, q, client, chain, nil, &l, ts)
+			_ = handleFillOrder(ctx, sugar, q, client, chain, rc, &l, ts)
 		case utils.CancelOrderSig:
-			_ = handleCancelOrder(ctx, sugar, q, client, chain, nil, &l, ts)
+			_ = handleCancelOrder(ctx, sugar, q, client, chain, rc, &l, ts)
 		}
 	}
 
