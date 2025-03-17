@@ -13,6 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	types2 "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	u2u "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	utypes "github.com/ethereum/go-ethereum/core/types"
@@ -1297,7 +1300,27 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 		go func() {
 			orderBytes, _ := json.Marshal(order)
 			_ = rc.Publish(ctx, config.FillOrderChannel, orderBytes).Err()
-			_ = libs.PusherClient.Trigger(config.PusherChannelOrder, config.FillOrderChannel, orderBytes)
+			orderPayload := map[string]any{
+				"order": order,
+				"type":  "fillOrder",
+			}
+			payloadBytes, _ := json.Marshal(orderPayload)
+
+			output, err := libs.SqsClient.SendMessage(ctx, &sqs.SendMessageInput{
+				MessageBody: aws.String(string(payloadBytes)),
+				QueueUrl:    aws.String(libs.QUEUE_URL),
+				MessageSystemAttributes: map[string]types2.MessageSystemAttributeValue{
+					"Priority": {
+						DataType:    aws.String("String"),
+						StringValue: aws.String("High"),
+					},
+				},
+			})
+			if err != nil {
+				sugar.Errorw("Failed to send message to SQS", "err", err)
+				return
+			}
+			sugar.Infow("SQS output", "message_id", output.MessageId)
 		}()
 	}
 
@@ -1348,7 +1371,27 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 		go func() {
 			orderBytes, _ := json.Marshal(order)
 			_ = rc.Publish(ctx, config.CancelOrderChannel, orderBytes).Err()
-			_ = libs.PusherClient.Trigger(config.PusherChannelOrder, config.CancelOrderChannel, orderBytes)
+			orderPayload := map[string]any{
+				"order": order,
+				"type":  "fillOrder",
+			}
+			payloadBytes, _ := json.Marshal(orderPayload)
+
+			output, err := libs.SqsClient.SendMessage(ctx, &sqs.SendMessageInput{
+				MessageBody: aws.String(string(payloadBytes)),
+				QueueUrl:    aws.String(libs.QUEUE_URL),
+				MessageSystemAttributes: map[string]types2.MessageSystemAttributeValue{
+					"Priority": {
+						DataType:    aws.String("String"),
+						StringValue: aws.String("High"),
+					},
+				},
+			})
+			if err != nil {
+				sugar.Errorw("Failed to send message to SQS", "err", err)
+				return
+			}
+			sugar.Infow("SQS output", "message_id", output.MessageId)
 		}()
 	}
 

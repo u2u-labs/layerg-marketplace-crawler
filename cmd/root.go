@@ -90,4 +90,8 @@ func initConfig() {
 	if libs.PusherClient == nil {
 		log.Fatal("Failed to initialize Pusher client")
 	}
+
+	libs.QUEUE_URL = viper.GetString("QUEUE_URL")
+	libs.AWS_REGION = viper.GetString("AWS_REGION")
+	libs.InitSQSClient(libs.InitAWSConfig())
 }
