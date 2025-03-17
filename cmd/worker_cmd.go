@@ -83,7 +83,17 @@ func startWorker(cmd *cobra.Command, args []string) {
 		sugar.Errorw("Failed to parse EXCHANGE ABI", "err", err)
 	}
 
-	InitBackfillProcessor(ctx, sugar, sqlDb, rdb, queueClient, dbStore)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		InitBackfillProcessor(ctx, sugar, sqlDb, rdb, queueClient, dbStore)
+	}()
+
+	// wait for signal to stop
+	select {
+	case <-ctx.Done():
+		return
+	}
 }
 
 func InitBackfillProcessor(ctx context.Context, sugar *zap.SugaredLogger, q *dbCon.Queries, rdb *redis.Client, queueClient *asynq.Client, dbStore *dbCon.DBManager) error {
