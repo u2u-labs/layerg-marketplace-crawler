@@ -110,7 +110,7 @@ func startCrawler(cmd *cobra.Command, args []string) {
 			return
 		case <-timer.C:
 			var wg sync.WaitGroup
-			iterCtx, cancel := context.WithTimeout(ctx, 180*time.Second)
+			iterCtx, cancel := context.WithCancel(ctx)
 			// redis subscribe to new assets channel to restart the crawler
 			go subscribeToNewAsset(iterCtx, sugar, cancel, &wg, rdb)
 
