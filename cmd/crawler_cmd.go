@@ -14,7 +14,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	types2 "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -568,17 +567,14 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 		Price:        order.PriceNum,
 		Timestamp:    payload.Timestamp.Unix(),
 	}
-	payloadBytes, _ := json.Marshal(orderPayload)
+	payloadBytes, _ := json.Marshal(map[string]any{
+		"type": "fulfilled_order",
+		"data": orderPayload,
+	})
 
 	output, err := libs.SqsClient.SendMessage(ctx, &sqs.SendMessageInput{
 		MessageBody: aws.String(string(payloadBytes)),
 		QueueUrl:    aws.String(libs.QUEUE_URL),
-		MessageSystemAttributes: map[string]types2.MessageSystemAttributeValue{
-			"Priority": {
-				DataType:    aws.String("String"),
-				StringValue: aws.String("High"),
-			},
-		},
 	})
 	if err != nil {
 		return err
