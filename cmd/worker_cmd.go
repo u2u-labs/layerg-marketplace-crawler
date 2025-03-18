@@ -7,8 +7,13 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
+	"time"
 
 	u2u "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -85,13 +90,38 @@ func startWorker(cmd *cobra.Command, args []string) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
 	go func() {
-		InitBackfillProcessor(ctx, sugar, sqlDb, rdb, queueClient, dbStore)
+		timer := time.NewTimer(config.BackfillTimeInterval)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				sugar.Info("Starting backfill process")
+				var wg sync.WaitGroup
+				iterCtx, cancel := context.WithCancel(ctx)
+				// redis subscribe to new assets channel to restart the crawler
+				go subscribeToNewAsset(iterCtx, sugar, cancel, &wg, rdb)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					InitBackfillProcessor(iterCtx, sugar, sqlDb, rdb, queueClient, dbStore)
+				}()
+				wg.Wait()
+				timer.Reset(config.BackfillTimeInterval)
+			}
+		}
 	}()
 
 	// wait for signal to stop
 	select {
-	case <-ctx.Done():
+	case <-sigCh:
+		cancel()
 		return
 	}
 }
@@ -127,7 +157,20 @@ func InitBackfillProcessor(ctx context.Context, sugar *zap.SugaredLogger, q *dbC
 		taskName := BackfillCollection + ":" + strconv.Itoa(int(chain.ID))
 		mux.Handle(taskName, NewBackfillProcessor(sugar, client, q, &chain, rdb, dbStore))
 
-		if err := srv.Run(mux); err != nil {
+		c := make(chan os.Signal, 1)
+		// Trigger graceful shutdown on SIGINT or SIGTERM.
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+		go func() {
+			select {
+			case <-ctx.Done():
+				srv.Shutdown()
+			case <-c:
+				srv.Shutdown()
+			}
+		}()
+
+		if err := srv.Run(mux); err != nil && err != asynq.ErrServerClosed {
 			log.Fatalf("could not run server: %v", err)
 		}
 	}
