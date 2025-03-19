@@ -209,6 +209,22 @@ func (p *BackfillProcessor) ProcessTask(ctx context.Context, t *asynq.Task) erro
 		return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
 	}
 
+	tx, err := p.dbStore.CrawlerDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	q := p.dbStore.CrQueries.WithTx(tx)
+	// get current block bf
+	newBf, err := q.GetCrawlingBackfillCrawlerById(ctx, dbCon.GetCrawlingBackfillCrawlerByIdParams{
+		ChainID:           bf.ChainID,
+		CollectionAddress: bf.CollectionAddress,
+	})
+	if err != nil {
+		return err
+	}
+	bf.CurrentBlock = newBf.CurrentBlock
+
 	blockRangeScan := int64(config.BackfillBlockRangeScan)
 
 	toScanBlock := bf.CurrentBlock + config.BackfillBlockRangeScan
@@ -261,32 +277,35 @@ func (p *BackfillProcessor) ProcessTask(ctx context.Context, t *asynq.Task) erro
 
 	switch bf.Type {
 	case dbCon.AssetTypeERC20:
-		handleErc20BackFill(ctx, p.sugar, p.q, p.ethClient, p.chain, logs)
+		handleErc20BackFill(ctx, p.sugar, q, p.ethClient, p.chain, logs)
 	case dbCon.AssetTypeERC721:
-		scannedBlock, err := handleErc721BackFill(ctx, p.sugar, p.q, p.rdb, p.ethClient, p.chain, logs)
+		scannedBlock, _ := handleErc721BackFill(ctx, p.sugar, q, p.rdb, p.ethClient, p.chain, logs)
 		if scannedBlock > 0 {
 			toScanBlock = int64(scannedBlock)
 		}
-		if err != nil {
-			toScanBlock = bf.CurrentBlock
-		}
 	case dbCon.AssetTypeERC1155:
-		scannedBlock, _ := handleErc1155Backfill(ctx, p.sugar, p.q, p.ethClient, p.chain, logs)
+		scannedBlock, _ := handleErc1155Backfill(ctx, p.sugar, q, p.ethClient, p.chain, logs)
 		if scannedBlock > 0 {
 			toScanBlock = int64(scannedBlock)
 		}
 	case dbCon.AssetTypeORDER:
-		handleExchangeBackfill(ctx, p.sugar, p.q, p.ethClient, p.chain, logs, p.rdb)
+		handleExchangeBackfill(ctx, p.sugar, q, p.ethClient, p.chain, logs, p.rdb)
 	}
 
 	bf.CurrentBlock = toScanBlock
 
-	p.q.UpdateCrawlingBackfill(ctx, dbCon.UpdateCrawlingBackfillParams{
+	err = q.UpdateCrawlingBackfill(ctx, dbCon.UpdateCrawlingBackfillParams{
 		ChainID:           bf.ChainID,
 		CollectionAddress: bf.CollectionAddress,
 		Status:            bf.Status,
 		CurrentBlock:      bf.CurrentBlock,
 	})
+	if err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
 
 	if bf.Status == dbCon.CrawlerStatusCRAWLED {
 		return nil

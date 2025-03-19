@@ -247,7 +247,6 @@ func crawlSupportedChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn 
 func ProcessCrawlingBackfillCollection(ctx context.Context, sugar *zap.SugaredLogger, q *dbCon.Queries, rdb *redis.Client, queueClient *asynq.Client, wg *sync.WaitGroup) error {
 	// Get all Backfill Collection with status CRAWLING
 	crawlingBackfill, err := q.GetCrawlingBackfillCrawler(ctx)
-
 	if err != nil {
 		return err
 	}

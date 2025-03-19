@@ -90,6 +90,51 @@ func (q *Queries) GetCrawlingBackfillCrawler(ctx context.Context) ([]GetCrawling
 	return items, nil
 }
 
+const getCrawlingBackfillCrawlerById = `-- name: GetCrawlingBackfillCrawlerById :one
+SELECT
+    bc.chain_id, bc.collection_address, bc.current_block, bc.status, bc.created_at,
+    a.type,
+    a.initial_block
+FROM
+    backfill_crawlers AS bc
+        JOIN
+    assets AS a
+    ON a.chain_id = bc.chain_id
+        AND a.collection_address = bc.collection_address
+WHERE
+    bc.chain_id = $1 AND bc.collection_address = $2
+`
+
+type GetCrawlingBackfillCrawlerByIdParams struct {
+	ChainID           int32  `json:"chainId"`
+	CollectionAddress string `json:"collectionAddress"`
+}
+
+type GetCrawlingBackfillCrawlerByIdRow struct {
+	ChainID           int32         `json:"chainId"`
+	CollectionAddress string        `json:"collectionAddress"`
+	CurrentBlock      int64         `json:"currentBlock"`
+	Status            CrawlerStatus `json:"status"`
+	CreatedAt         time.Time     `json:"createdAt"`
+	Type              AssetType     `json:"type"`
+	InitialBlock      sql.NullInt64 `json:"initialBlock"`
+}
+
+func (q *Queries) GetCrawlingBackfillCrawlerById(ctx context.Context, arg GetCrawlingBackfillCrawlerByIdParams) (GetCrawlingBackfillCrawlerByIdRow, error) {
+	row := q.db.QueryRowContext(ctx, getCrawlingBackfillCrawlerById, arg.ChainID, arg.CollectionAddress)
+	var i GetCrawlingBackfillCrawlerByIdRow
+	err := row.Scan(
+		&i.ChainID,
+		&i.CollectionAddress,
+		&i.CurrentBlock,
+		&i.Status,
+		&i.CreatedAt,
+		&i.Type,
+		&i.InitialBlock,
+	)
+	return i, err
+}
+
 const updateCrawlingBackfill = `-- name: UpdateCrawlingBackfill :exec
 UPDATE backfill_crawlers
 SET 
