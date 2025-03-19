@@ -226,8 +226,11 @@ func (p *BackfillProcessor) ProcessTask(ctx context.Context, t *asynq.Task) erro
 	bf.CurrentBlock = newBf.CurrentBlock
 
 	blockRangeScan := int64(config.BackfillBlockRangeScan)
+	if newBf.BlockScanInterval.Valid && newBf.BlockScanInterval.Int64 > 0 {
+		blockRangeScan = newBf.BlockScanInterval.Int64
+	}
 
-	toScanBlock := bf.CurrentBlock + config.BackfillBlockRangeScan
+	toScanBlock := bf.CurrentBlock + blockRangeScan
 	// get the nearest upper block that multiple of blockRangeScan
 	if (bf.CurrentBlock % blockRangeScan) != 0 {
 		toScanBlock = ((bf.CurrentBlock / blockRangeScan) + 1) * blockRangeScan

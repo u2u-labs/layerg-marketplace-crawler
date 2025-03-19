@@ -186,6 +186,7 @@ type BackfillCrawler struct {
 	CurrentBlock      int64         `json:"currentBlock"`
 	Status            CrawlerStatus `json:"status"`
 	CreatedAt         time.Time     `json:"createdAt"`
+	BlockScanInterval sql.NullInt64 `json:"blockScanInterval"`
 }
 
 type Chain struct {

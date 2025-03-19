@@ -78,6 +78,7 @@ func AddBackfillCrawlerTask(ctx context.Context, sugar *zap.SugaredLogger, clien
 			if err != nil {
 				log.Fatalf("could not enqueue task: %v", err)
 			}
+			timer.Reset(time.Duration(chain.BlockTime) * time.Millisecond)
 		}
 	}
 }

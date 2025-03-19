@@ -22,10 +22,10 @@ AND collection_address = $2;
 
 -- name: AddBackfillCrawler :exec
 INSERT INTO backfill_crawlers (
-    chain_id, collection_address, current_block
+    chain_id, collection_address, current_block, block_scan_interval
 )
 VALUES (
-    $1, $2, $3
+    $1, $2, $3, $4
 ) ON CONFLICT ON CONSTRAINT BACKFILL_CRAWLERS_PKEY DO UPDATE SET
     current_block = EXCLUDED.current_block,
     status = 'CRAWLING'
