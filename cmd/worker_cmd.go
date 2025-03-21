@@ -93,6 +93,7 @@ func startWorker(cmd *cobra.Command, args []string) {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	sugar.Info("Starting backfill process")
 
 	go func() {
 		timer := time.NewTimer(config.BackfillTimeInterval)
@@ -102,7 +103,6 @@ func startWorker(cmd *cobra.Command, args []string) {
 			case <-ctx.Done():
 				return
 			case <-timer.C:
-				sugar.Info("Starting backfill process")
 				var wg sync.WaitGroup
 				iterCtx, cancel := context.WithCancel(ctx)
 				// redis subscribe to new assets channel to restart the crawler
