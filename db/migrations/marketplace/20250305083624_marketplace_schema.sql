@@ -40,8 +40,8 @@ CREATE TABLE IF NOT EXISTS "Collection"
     "shortUrl"       TEXT,
     "metadata"       TEXT,
     "isU2U"          BOOLEAN          NOT NULL DEFAULT true,
-    "status"         "TX_STATUS"      NOT NULL,
-    "type"           "CONTRACT_TYPE"  NOT NULL,
+    "status"         TEXT             NOT NULL,
+    "type"           TEXT             NOT NULL,
     "categoryId"     INTEGER,
     "createdAt"      TIMESTAMP(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt"      TIMESTAMP(3)     NOT NULL,
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS "Collection"
       }
     }',
     "metadataJson"   JSONB,
-    "gameId"         TEXT,
+    "gameLayergId"   TEXT,
     "source"         TEXT,
     "categoryG"      JSONB,
     "vol"            DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -95,8 +95,65 @@ CREATE TABLE IF NOT EXISTS "Collection"
     CONSTRAINT "Collection_pkey" PRIMARY KEY ("id")
 );
 
---ALTER TABLE "Collection"
---    ADD COLUMN IF NOT EXISTS "chainId" BIGINT NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS "AnalysisCollection"
+(
+    "id"           TEXT             NOT NULL PRIMARY KEY,
+    "collectionId" UUID             NOT NULL REFERENCES "Collection" ON UPDATE CASCADE ON DELETE RESTRICT,
+    "keyTime"      TEXT             NOT NULL,
+    address        TEXT             NOT NULL,
+    type           TEXT             NOT NULL,
+    volume         NUMERIC(78)      NOT NULL DEFAULT 0,
+    vol            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "volumeWei"    TEXT             NOT NULL DEFAULT '0',
+    "floorPrice"   BIGINT           NOT NULL DEFAULT 0,
+    floor          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "floorWei"     TEXT             NOT NULL DEFAULT '0',
+    items          BIGINT           NOT NULL DEFAULT 0,
+    owner          BIGINT           NOT NULL DEFAULT 0,
+    "createdAt"    TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE "Collection"
+    ADD COLUMN IF NOT EXISTS "chainId" BIGINT NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS "Order"
+(
+    "index"            INTEGER          NOT NULL DEFAULT 1,
+    "sig"              TEXT             NOT NULL,
+    "makerId"          UUID             NOT NULL REFERENCES "User" ON UPDATE CASCADE ON DELETE RESTRICT,
+    "makeAssetType"    INTEGER          NOT NULL,
+    "makeAssetAddress" TEXT             NOT NULL,
+    "makeAssetValue"   TEXT             NOT NULL,
+    "makeAssetId"      TEXT             NOT NULL,
+    "takerId"          UUID             REFERENCES "User" ON UPDATE CASCADE ON DELETE SET NULL,
+    "takeAssetType"    INTEGER          NOT NULL,
+    "takeAssetAddress" TEXT             NOT NULL,
+    "takeAssetValue"   TEXT             NOT NULL,
+    "takeAssetId"      TEXT             NOT NULL,
+    "salt"             TEXT             NOT NULL,
+    "start"            INTEGER          NOT NULL DEFAULT 0,
+    "end"              INTEGER          NOT NULL DEFAULT 0,
+    "orderStatus"      TEXT             NOT NULL DEFAULT 'OPEN'::"ORDERSTATUS",
+    "orderType"        TEXT             NOT NULL,
+    "root"             TEXT             NOT NULL DEFAULT '0x0000000000000000000000000000000000000000000000000000000000000000',
+    "proof"            TEXT[]                    DEFAULT ARRAY []::TEXT[],
+    "tokenId"          VARCHAR(255)     NOT NULL,
+    "collectionId"     UUID             NOT NULL,
+    "quantity"         INTEGER          NOT NULL DEFAULT 1,
+    "price"            TEXT             NOT NULL DEFAULT '0',
+    "priceNum"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "netPrice"         TEXT             NOT NULL DEFAULT '0',
+    "netPriceNum"      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt"        TIMESTAMP(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"        TIMESTAMP(3),
+    "quoteToken"       TEXT             NOT NULL,
+    "filledQty"        INTEGER          NOT NULL DEFAULT 0,
+    PRIMARY KEY ("sig", "index"),
+    CONSTRAINT "order_by_id_fk"
+        FOREIGN KEY ("tokenId", "collectionId") REFERENCES "NFT"
+            ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
 
 -- +goose StatementEnd
 

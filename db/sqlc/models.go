@@ -145,6 +145,23 @@ func (ns NullOrderStatus) Value() (driver.Value, error) {
 	return string(ns.OrderStatus), nil
 }
 
+type AnalysisCollection struct {
+	ID           string    `json:"id"`
+	CollectionId uuid.UUID `json:"collectionId"`
+	KeyTime      string    `json:"keyTime"`
+	Address      string    `json:"address"`
+	Type         string    `json:"type"`
+	Volume       string    `json:"volume"`
+	Vol          float64   `json:"vol"`
+	VolumeWei    string    `json:"volumeWei"`
+	FloorPrice   int64     `json:"floorPrice"`
+	Floor        float64   `json:"floor"`
+	FloorWei     string    `json:"floorWei"`
+	Items        int64     `json:"items"`
+	Owner        int64     `json:"owner"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
 type App struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
@@ -169,6 +186,7 @@ type BackfillCrawler struct {
 	CurrentBlock      int64         `json:"currentBlock"`
 	Status            CrawlerStatus `json:"status"`
 	CreatedAt         time.Time     `json:"createdAt"`
+	BlockScanInterval sql.NullInt64 `json:"blockScanInterval"`
 }
 
 type Chain struct {
@@ -193,8 +211,8 @@ type Collection struct {
 	ShortUrl       sql.NullString        `json:"shortUrl"`
 	Metadata       sql.NullString        `json:"metadata"`
 	IsU2U          bool                  `json:"isU2U"`
-	Status         interface{}           `json:"status"`
-	Type           interface{}           `json:"type"`
+	Status         string                `json:"status"`
+	Type           string                `json:"type"`
 	CategoryId     sql.NullInt32         `json:"categoryId"`
 	CreatedAt      time.Time             `json:"createdAt"`
 	UpdatedAt      time.Time             `json:"updatedAt"`
@@ -213,7 +231,7 @@ type Collection struct {
 	MetricPoint    sql.NullInt64         `json:"metricPoint"`
 	MetricDetail   pqtype.NullRawMessage `json:"metricDetail"`
 	MetadataJson   pqtype.NullRawMessage `json:"metadataJson"`
-	GameId         sql.NullString        `json:"gameId"`
+	GameLayergId   sql.NullString        `json:"gameLayergId"`
 	Source         sql.NullString        `json:"source"`
 	CategoryG      pqtype.NullRawMessage `json:"categoryG"`
 	Vol            float64               `json:"vol"`
@@ -302,6 +320,39 @@ type OnchainHistory struct {
 	Timestamp time.Time `json:"timestamp"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type Order struct {
+	Index            int32         `json:"index"`
+	Sig              string        `json:"sig"`
+	MakerId          uuid.UUID     `json:"makerId"`
+	MakeAssetType    int32         `json:"makeAssetType"`
+	MakeAssetAddress string        `json:"makeAssetAddress"`
+	MakeAssetValue   string        `json:"makeAssetValue"`
+	MakeAssetId      string        `json:"makeAssetId"`
+	TakerId          uuid.NullUUID `json:"takerId"`
+	TakeAssetType    int32         `json:"takeAssetType"`
+	TakeAssetAddress string        `json:"takeAssetAddress"`
+	TakeAssetValue   string        `json:"takeAssetValue"`
+	TakeAssetId      string        `json:"takeAssetId"`
+	Salt             string        `json:"salt"`
+	Start            int32         `json:"start"`
+	End              int32         `json:"end"`
+	OrderStatus      string        `json:"orderStatus"`
+	OrderType        string        `json:"orderType"`
+	Root             string        `json:"root"`
+	Proof            []string      `json:"proof"`
+	TokenId          string        `json:"tokenId"`
+	CollectionId     uuid.UUID     `json:"collectionId"`
+	Quantity         int32         `json:"quantity"`
+	Price            string        `json:"price"`
+	PriceNum         float64       `json:"priceNum"`
+	NetPrice         string        `json:"netPrice"`
+	NetPriceNum      float64       `json:"netPriceNum"`
+	CreatedAt        time.Time     `json:"createdAt"`
+	UpdatedAt        sql.NullTime  `json:"updatedAt"`
+	QuoteToken       string        `json:"quoteToken"`
+	FilledQty        int32         `json:"filledQty"`
 }
 
 type OrderAsset struct {

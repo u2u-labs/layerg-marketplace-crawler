@@ -81,7 +81,9 @@ func BatchCallRpcClient(ctx context.Context, sugar *zap.SugaredLogger, calls []r
 
 		// Rate limit enforcement
 		if err := limiter.Wait(ctx); err != nil {
-			sugar.Errorw("Failed to wait for rate limit", "err", err)
+			if !strings.Contains(err.Error(), "context deadline exceeded") {
+				sugar.Errorw("Failed to wait for rate limit", "err", err)
+			}
 			return err
 		}
 
@@ -94,7 +96,7 @@ func BatchCallRpcClient(ctx context.Context, sugar *zap.SugaredLogger, calls []r
 
 			// Log error
 			if attempt > 2 {
-				sugar.Errorf("Batch call failed %s %d", "attempt", attempt+1)
+				sugar.Warnf("Batch call failed %s %d", "attempt", attempt+1)
 			}
 
 			// Check if it's a 429 rate limit error
@@ -111,7 +113,9 @@ func BatchCallRpcClient(ctx context.Context, sugar *zap.SugaredLogger, calls []r
 					continue
 				}
 			}
-			sugar.Errorf("Batch call failed %s %s", "err", err)
+			if !strings.Contains(err.Error(), "context deadline exceeded") {
+				sugar.Errorf("Batch call failed %s %s", "err", err)
+			}
 
 			// If it's not a 429 error, return immediately
 			return err

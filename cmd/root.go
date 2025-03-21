@@ -11,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/u2u-labs/layerg-crawler/cmd/libs"
 )
 
 var cfgFile string
@@ -22,8 +23,8 @@ var (
 		Short: "Start a multichain crawler",
 		Long:  `Start a multichain crawler.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			go startApi(cmd, args)
-			go startWorker(cmd, args)
+			//go startApi(cmd, args)
+			//go startWorker(cmd, args)
 			startCrawler(cmd, args)
 		},
 	}
@@ -79,4 +80,18 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
+
+	libs.PusherClient = libs.NewPusherClient(
+		viper.GetString("PUSHER_APP_ID"),
+		viper.GetString("PUSHER_KEY"),
+		viper.GetString("PUSHER_SECRET"),
+		viper.GetString("PUSHER_CLUSTER"),
+	)
+	if libs.PusherClient == nil {
+		log.Fatal("Failed to initialize Pusher client")
+	}
+
+	libs.QUEUE_URL = viper.GetString("QUEUE_URL")
+	libs.AWS_REGION = viper.GetString("AWS_REGION")
+	libs.InitSQSClient(libs.InitAWSConfig())
 }

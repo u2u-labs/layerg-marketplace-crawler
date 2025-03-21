@@ -14,62 +14,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const getCollectionByAddressAndChainId = `-- name: GetCollectionByAddressAndChainId :one
-SELECT id, "txCreationHash", name, "nameSlug", symbol, description, address, "shortUrl", metadata, "isU2U", status, type, "categoryId", "createdAt", "updatedAt", "coverImage", avatar, "projectId", "isVerified", "floorPrice", floor, "floorWei", "isActive", "flagExtend", "isSync", "subgraphUrl", "lastTimeSync", "metricPoint", "metricDetail", "metadataJson", "gameId", source, "categoryG", vol, "volumeWei", "chainId"
-FROM "Collection"
-WHERE "address" ILIKE $1
-  AND "chainId" = $2
-`
-
-type GetCollectionByAddressAndChainIdParams struct {
-	Address sql.NullString `json:"address"`
-	ChainId int64          `json:"chainId"`
-}
-
-func (q *Queries) GetCollectionByAddressAndChainId(ctx context.Context, arg GetCollectionByAddressAndChainIdParams) (Collection, error) {
-	row := q.db.QueryRowContext(ctx, getCollectionByAddressAndChainId, arg.Address, arg.ChainId)
-	var i Collection
-	err := row.Scan(
-		&i.ID,
-		&i.TxCreationHash,
-		&i.Name,
-		&i.NameSlug,
-		&i.Symbol,
-		&i.Description,
-		&i.Address,
-		&i.ShortUrl,
-		&i.Metadata,
-		&i.IsU2U,
-		&i.Status,
-		&i.Type,
-		&i.CategoryId,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.CoverImage,
-		&i.Avatar,
-		&i.ProjectId,
-		&i.IsVerified,
-		&i.FloorPrice,
-		&i.Floor,
-		&i.FloorWei,
-		&i.IsActive,
-		&i.FlagExtend,
-		&i.IsSync,
-		&i.SubgraphUrl,
-		&i.LastTimeSync,
-		&i.MetricPoint,
-		&i.MetricDetail,
-		&i.MetadataJson,
-		&i.GameId,
-		&i.Source,
-		&i.CategoryG,
-		&i.Vol,
-		&i.VolumeWei,
-		&i.ChainId,
-	)
-	return i, err
-}
-
 const upsertNFT = `-- name: UpsertNFT :one
 INSERT INTO "NFT" ("id", name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash",
                    "creatorId", "collectionId", image, description, "animationUrl",

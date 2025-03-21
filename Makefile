@@ -34,7 +34,7 @@ create-db-marketplace:
 	@psql "$(GOOSE_MKP_DEFAULT_DBSTRING)" -c "SELECT 1 FROM pg_database WHERE datname = 'marketplace'" | grep -q 1 || psql "$(GOOSE_MKP_DEFAULT_DBSTRING)" -c "CREATE DATABASE marketplace"
 
 migrate-up: create-db migrate-up-marketplace
-	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_DBSTRING) goose -dir $(GOOSE_MIGRATION_DIR) up-to 20250304090233
+	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_DBSTRING) goose -dir $(GOOSE_MIGRATION_DIR) up-to 20250319042110
 migrate-down:
 	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_DBSTRING) goose -dir $(GOOSE_MIGRATION_DIR) down
 migrate-reset:

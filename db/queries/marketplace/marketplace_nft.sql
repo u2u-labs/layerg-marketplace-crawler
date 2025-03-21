@@ -20,9 +20,3 @@ ON CONFLICT ("id", "collectionId")
                   source           = EXCLUDED.source,
                   "ownerId"        = EXCLUDED."ownerId"
 RETURNING *;
-
--- name: GetCollectionByAddressAndChainId :one
-SELECT *
-FROM "Collection"
-WHERE "address" ILIKE $1
-  AND "chainId" = $2;

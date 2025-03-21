@@ -6,20 +6,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 	"github.com/u2u-labs/layerg-crawler/cmd/helpers"
+	"github.com/u2u-labs/layerg-crawler/cmd/libs"
 	"github.com/u2u-labs/layerg-crawler/cmd/types"
 	"github.com/u2u-labs/layerg-crawler/config"
 
 	_ "github.com/lib/pq"
-	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -86,14 +90,15 @@ func startCrawler(cmd *cobra.Command, args []string) {
 		sugar.Errorw("Failed to parse EXCHANGE ABI", "err", err)
 	}
 
-	err = crawlSupportedChains(ctx, sugar, dbStore.CrawlerDB, dbStore.CrQueries, rdb)
+	err = crawlSupportedChains(ctx, sugar, dbStore, rdb, true)
 	if err != nil {
 		sugar.Errorw("Error init supported chains", "err", err)
 		return
 	}
 
-	// start consumer handle transfer events
+	// start consumers
 	go erc721TransferEventHandler(ctx, dbStore, sugar, rdb)
+	go fillOrderEventHandler(ctx, dbStore, sugar, rdb)
 
 	timer := time.NewTimer(config.RetriveAddedChainsAndAssetsInterval)
 	defer timer.Stop()
@@ -104,14 +109,14 @@ func startCrawler(cmd *cobra.Command, args []string) {
 			return
 		case <-timer.C:
 			var wg sync.WaitGroup
-			iterCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			iterCtx, cancel := context.WithCancel(ctx)
 			// redis subscribe to new assets channel to restart the crawler
 			go subscribeToNewAsset(iterCtx, sugar, cancel, &wg, rdb)
 
 			// Process new chains
-			ProcessNewChains(iterCtx, sugar, dbStore.CrawlerDB, rdb, dbStore.CrQueries, &wg)
+			ProcessNewChains(iterCtx, sugar, dbStore, rdb, &wg)
 			// Process new assets
-			ProcessNewChainAssets(iterCtx, sugar, rdb)
+			ProcessNewChainAssets(iterCtx, sugar, rdb, dbStore)
 			// Process backfill collection
 			ProcessCrawlingBackfillCollection(iterCtx, sugar, dbStore.CrQueries, rdb, queueClient, &wg)
 
@@ -123,7 +128,7 @@ func startCrawler(cmd *cobra.Command, args []string) {
 	}
 }
 
-func ProcessNewChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn *sql.DB, rdb *redis.Client, q *dbCon.Queries, wg *sync.WaitGroup) {
+func ProcessNewChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn *dbCon.DBManager, rdb *redis.Client, wg *sync.WaitGroup) {
 	chains, err := db.GetCachedPendingChain(ctx, rdb)
 	if err != nil {
 		sugar.Errorw("ProcessNewChains failed to get cached pending chains", "err", err)
@@ -149,13 +154,13 @@ func ProcessNewChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn *sql
 		wg.Add(1)
 		go func(chain dbCon.Chain) {
 			defer wg.Done()
-			StartChainCrawler(ctx, sugar, &EvmRPCClient{client, rpcClient}, dbConn, q, &chain, rdb)
+			StartChainCrawler(ctx, sugar, &EvmRPCClient{client, rpcClient}, dbConn, &chain, rdb)
 		}(c)
 		sugar.Infow("Initiated new chain, start crawling", "chain", c)
 	}
 }
 
-func ProcessNewChainAssets(ctx context.Context, sugar *zap.SugaredLogger, rdb *redis.Client) {
+func ProcessNewChainAssets(ctx context.Context, sugar *zap.SugaredLogger, rdb *redis.Client, dbConn *dbCon.DBManager) {
 	assets, err := db.GetCachedPendingAsset(ctx, rdb)
 	if err != nil {
 		sugar.Errorw("ProcessNewChainAssets failed to get cached pending assets", "err", err)
@@ -178,9 +183,9 @@ func ProcessNewChainAssets(ctx context.Context, sugar *zap.SugaredLogger, rdb *r
 	}
 }
 
-func crawlSupportedChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn *sql.DB, q *dbCon.Queries, rdb *redis.Client) error {
+func crawlSupportedChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn *dbCon.DBManager, rdb *redis.Client, shouldStartCrawler bool) error {
 	// Query, flush cache and connect all supported chains
-	chains, err := q.GetAllChain(ctx)
+	chains, err := dbConn.CrQueries.GetAllChain(ctx)
 	if err != nil {
 		return err
 	}
@@ -200,7 +205,7 @@ func crawlSupportedChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn 
 			offset int32 = 0
 		)
 		for {
-			a, err := q.GetPaginatedAssetsByChainId(ctx, dbCon.GetPaginatedAssetsByChainIdParams{
+			a, err := dbConn.CrQueries.GetPaginatedAssetsByChainId(ctx, dbCon.GetPaginatedAssetsByChainIdParams{
 				ChainID: c.ID,
 				Limit:   limit,
 				Offset:  offset,
@@ -232,7 +237,9 @@ func crawlSupportedChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn 
 		if err != nil {
 			return err
 		}
-		go StartChainCrawler(ctx, sugar, &EvmRPCClient{client, rpcClient}, dbConn, q, &c, rdb)
+		if shouldStartCrawler {
+			go StartChainCrawler(ctx, sugar, &EvmRPCClient{client, rpcClient}, dbConn, &c, rdb)
+		}
 	}
 	return nil
 }
@@ -240,7 +247,6 @@ func crawlSupportedChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn 
 func ProcessCrawlingBackfillCollection(ctx context.Context, sugar *zap.SugaredLogger, q *dbCon.Queries, rdb *redis.Client, queueClient *asynq.Client, wg *sync.WaitGroup) error {
 	// Get all Backfill Collection with status CRAWLING
 	crawlingBackfill, err := q.GetCrawlingBackfillCrawler(ctx)
-
 	if err != nil {
 		return err
 	}
@@ -389,4 +395,195 @@ func subscribeToNewAsset(ctx context.Context, sugar *zap.SugaredLogger, cancel c
 			return
 		}
 	}
+}
+
+func fillOrderEventHandler(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, rdb *redis.Client) {
+	logger.Info("Starting fill order event handler")
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Errorw("Recovered from panic in fillOrderEventHandler", "error", r, "stacktrace", string(debug.Stack()))
+		}
+	}()
+
+	ps := rdb.Subscribe(ctx, config.FillOrderChannel)
+	defer ps.Close()
+	ch := ps.Channel()
+
+	//ps2 := rdb.Subscribe(ctx, config.CancelOrderChannel)
+	//defer ps2.Close()
+	//ch2 := ps2.Channel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Context canceled, time to shut down
+			logger.Info("Shutting down fill order event handler due to context cancellation")
+			return
+
+		case msg, ok := <-ch:
+			// Channel closed or error occurred
+			if !ok {
+				logger.Warn("Redis subscription channel closed, exiting handler")
+				return
+			}
+
+			// Process the message
+			if err := processFillOrderEvent(ctx, dbStore, logger, msg); err != nil {
+				logger.Errorw("Error processing fill order event", "error", err)
+			}
+			//case msg, ok := <-ch2:
+			//	if !ok {
+			//		logger.Warn("Redis subscription channel closed, exiting handler")
+			//		return
+			//	}
+			//
+			//	// Process the message
+			//	if err := processCancelOrderEvent(ctx, dbStore, logger, msg); err != nil {
+			//		logger.Errorw("Error processing cancel order event", "error", err)
+			//	}
+		}
+	}
+}
+
+func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) error {
+	var payload dbCon.OrderAsset
+	if err := json.Unmarshal([]byte(msg.Payload), &payload); err != nil {
+		return fmt.Errorf("failed to unmarshal: %w", err)
+	}
+
+	// get total nfts and total owners
+	//totalItems, err := dbStore.CrQueries.Count721AssetByAssetId(ctx, payload.AssetID)
+	//if err != nil {
+	//	return fmt.Errorf("failed to get total items: %w", err)
+	//}
+	//totalOwners, err := dbStore.CrQueries.Count721AssetHolderByAssetId(ctx, payload.AssetID)
+	//if err != nil {
+	//	return fmt.Errorf("failed to get total owners: %w", err)
+	//}
+
+	tx, err := dbStore.MarketplaceDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	q := dbStore.MpQueries.WithTx(tx)
+
+	collection, err := q.GetCollectionByAddressAndChainId(ctx, dbCon.GetCollectionByAddressAndChainIdParams{
+		Address: sql.NullString{String: strings.ToLower(payload.Taker.String), Valid: true},
+		ChainId: int64(payload.ChainID),
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get collection: %w", err)
+	}
+
+	order, err := q.GetOrderBySignature(ctx, dbCon.GetOrderBySignatureParams{
+		Sig:   payload.Sig,
+		Index: payload.Index,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("order not found, sig=%s", payload.Sig)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get order: %w", err)
+	}
+
+	// update collection's volume
+	price, ok := new(big.Int).SetString(order.Price, 10)
+	if !ok {
+		price = new(big.Int) // set 0 if not a valid number
+	}
+	quantity, ok := new(big.Int).SetString(payload.TakeQty, 10)
+	if !ok {
+		quantity = new(big.Int)
+	}
+	collection.Vol += float64(price.Uint64() * quantity.Uint64())
+	volumeWei, ok := new(big.Int).SetString(collection.VolumeWei, 10)
+	if !ok {
+		return fmt.Errorf("invalid volume wei")
+	}
+	volumeWei = volumeWei.Add(volumeWei, price.Mul(price, quantity))
+	collection.VolumeWei = volumeWei.String()
+
+	// update collection volume
+	_, err = q.UpdateCollectionVolume(ctx, dbCon.UpdateCollectionVolumeParams{
+		Vol:       collection.Vol,
+		VolumeWei: collection.VolumeWei,
+		ID:        collection.ID,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("collection not found: %w", err)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to update collection volume: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	//n := time.Now()
+	// format ts as YYYYMMDD_HH
+	//formattedDate := n.Format("20060102_150405")
+	//id := fmt.Sprintf("%s_%s", strings.ToLower(collection.Address.String), formattedDate)
+	//id, err := uuid.NewV7()
+	//if err != nil {
+	//	return fmt.Errorf("failed to generate id: %w", err)
+	//}
+	//err = q.UpsertAnalysisCollection(ctx, dbCon.UpsertAnalysisCollectionParams{
+	//	ID:           id.String(),
+	//	CollectionId: collection.ID,
+	//	KeyTime:      formattedDate,
+	//	Address:      collection.Address.String,
+	//	Type:         collection.Type,
+	//	Volume:       collection.VolumeWei,
+	//	Vol:          collection.Vol,
+	//	VolumeWei:    collection.VolumeWei,
+	//	FloorPrice:   collection.FloorPrice,
+	//	Floor:        collection.Floor,
+	//	FloorWei:     collection.FloorWei,
+	//	Items:        totalItems,  // total nfts
+	//	Owner:        totalOwners, // total owners
+	//	CreatedAt:    time.Now(),
+	//})
+	//if err != nil {
+	//	return fmt.Errorf("failed to upsert collection: %w", err)
+	//}
+
+	// send to sqs
+	orderPayload := types.FulfillOrderEvent{
+		GameId:       collection.GameLayergId.String,
+		CollectionId: collection.ID.String(),
+		Amount:       order.FilledQty,
+		NftId:        order.TokenId,
+		QuoteToken:   order.QuoteToken,
+		ChainId:      collection.ChainId,
+		PriceWei:     order.Price,
+		Price:        order.PriceNum,
+		Timestamp:    payload.Timestamp.Unix(),
+	}
+	payloadBytes, _ := json.Marshal(map[string]any{
+		"type": "fulfilled_order",
+		"data": orderPayload,
+	})
+
+	output, err := libs.SqsClient.SendMessage(ctx, &sqs.SendMessageInput{
+		MessageBody: aws.String(string(payloadBytes)),
+		QueueUrl:    aws.String(libs.QUEUE_URL),
+	})
+	if err != nil {
+		return err
+	}
+	logger.Debugw("Sent message to queue", "output", output.MessageId)
+
+	return nil
+}
+
+func processCancelOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) error {
+	// do nothing for now
+	return nil
 }

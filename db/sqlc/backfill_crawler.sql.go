@@ -13,30 +13,36 @@ import (
 
 const addBackfillCrawler = `-- name: AddBackfillCrawler :exec
 INSERT INTO backfill_crawlers (
-    chain_id, collection_address, current_block
+    chain_id, collection_address, current_block, block_scan_interval
 )
 VALUES (
-    $1, $2, $3
+    $1, $2, $3, $4
 ) ON CONFLICT ON CONSTRAINT BACKFILL_CRAWLERS_PKEY DO UPDATE SET
     current_block = EXCLUDED.current_block,
     status = 'CRAWLING'
-RETURNING chain_id, collection_address, current_block, status, created_at
+RETURNING chain_id, collection_address, current_block, status, created_at, block_scan_interval
 `
 
 type AddBackfillCrawlerParams struct {
-	ChainID           int32  `json:"chainId"`
-	CollectionAddress string `json:"collectionAddress"`
-	CurrentBlock      int64  `json:"currentBlock"`
+	ChainID           int32         `json:"chainId"`
+	CollectionAddress string        `json:"collectionAddress"`
+	CurrentBlock      int64         `json:"currentBlock"`
+	BlockScanInterval sql.NullInt64 `json:"blockScanInterval"`
 }
 
 func (q *Queries) AddBackfillCrawler(ctx context.Context, arg AddBackfillCrawlerParams) error {
-	_, err := q.db.ExecContext(ctx, addBackfillCrawler, arg.ChainID, arg.CollectionAddress, arg.CurrentBlock)
+	_, err := q.db.ExecContext(ctx, addBackfillCrawler,
+		arg.ChainID,
+		arg.CollectionAddress,
+		arg.CurrentBlock,
+		arg.BlockScanInterval,
+	)
 	return err
 }
 
 const getCrawlingBackfillCrawler = `-- name: GetCrawlingBackfillCrawler :many
 SELECT 
-    bc.chain_id, bc.collection_address, bc.current_block, bc.status, bc.created_at, 
+    bc.chain_id, bc.collection_address, bc.current_block, bc.status, bc.created_at, bc.block_scan_interval, 
     a.type, 
     a.initial_block 
 FROM 
@@ -55,6 +61,7 @@ type GetCrawlingBackfillCrawlerRow struct {
 	CurrentBlock      int64         `json:"currentBlock"`
 	Status            CrawlerStatus `json:"status"`
 	CreatedAt         time.Time     `json:"createdAt"`
+	BlockScanInterval sql.NullInt64 `json:"blockScanInterval"`
 	Type              AssetType     `json:"type"`
 	InitialBlock      sql.NullInt64 `json:"initialBlock"`
 }
@@ -74,6 +81,7 @@ func (q *Queries) GetCrawlingBackfillCrawler(ctx context.Context) ([]GetCrawling
 			&i.CurrentBlock,
 			&i.Status,
 			&i.CreatedAt,
+			&i.BlockScanInterval,
 			&i.Type,
 			&i.InitialBlock,
 		); err != nil {
@@ -88,6 +96,53 @@ func (q *Queries) GetCrawlingBackfillCrawler(ctx context.Context) ([]GetCrawling
 		return nil, err
 	}
 	return items, nil
+}
+
+const getCrawlingBackfillCrawlerById = `-- name: GetCrawlingBackfillCrawlerById :one
+SELECT
+    bc.chain_id, bc.collection_address, bc.current_block, bc.status, bc.created_at, bc.block_scan_interval,
+    a.type,
+    a.initial_block
+FROM
+    backfill_crawlers AS bc
+        JOIN
+    assets AS a
+    ON a.chain_id = bc.chain_id
+        AND a.collection_address = bc.collection_address
+WHERE
+    bc.chain_id = $1 AND bc.collection_address = $2
+`
+
+type GetCrawlingBackfillCrawlerByIdParams struct {
+	ChainID           int32  `json:"chainId"`
+	CollectionAddress string `json:"collectionAddress"`
+}
+
+type GetCrawlingBackfillCrawlerByIdRow struct {
+	ChainID           int32         `json:"chainId"`
+	CollectionAddress string        `json:"collectionAddress"`
+	CurrentBlock      int64         `json:"currentBlock"`
+	Status            CrawlerStatus `json:"status"`
+	CreatedAt         time.Time     `json:"createdAt"`
+	BlockScanInterval sql.NullInt64 `json:"blockScanInterval"`
+	Type              AssetType     `json:"type"`
+	InitialBlock      sql.NullInt64 `json:"initialBlock"`
+}
+
+func (q *Queries) GetCrawlingBackfillCrawlerById(ctx context.Context, arg GetCrawlingBackfillCrawlerByIdParams) (GetCrawlingBackfillCrawlerByIdRow, error) {
+	row := q.db.QueryRowContext(ctx, getCrawlingBackfillCrawlerById, arg.ChainID, arg.CollectionAddress)
+	var i GetCrawlingBackfillCrawlerByIdRow
+	err := row.Scan(
+		&i.ChainID,
+		&i.CollectionAddress,
+		&i.CurrentBlock,
+		&i.Status,
+		&i.CreatedAt,
+		&i.BlockScanInterval,
+		&i.Type,
+		&i.InitialBlock,
+	)
+	return i, err
 }
 
 const updateCrawlingBackfill = `-- name: UpdateCrawlingBackfill :exec

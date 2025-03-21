@@ -34,7 +34,7 @@ type EvmRPCClient struct {
 	RpcClient *rpc.Client
 }
 
-func StartChainCrawler(ctx context.Context, sugar *zap.SugaredLogger, client *EvmRPCClient, dbConn *sql.DB, q *db.Queries, chain *db.Chain, rdb *redis.Client) {
+func StartChainCrawler(ctx context.Context, sugar *zap.SugaredLogger, client *EvmRPCClient, dbConn *db.DBManager, chain *db.Chain, rdb *redis.Client) {
 	sugar.Infow("Start chain crawler", "chain", chain)
 	timer := time.NewTimer(time.Duration(chain.BlockTime) * time.Millisecond)
 	defer timer.Stop()
@@ -45,7 +45,7 @@ func StartChainCrawler(ctx context.Context, sugar *zap.SugaredLogger, client *Ev
 			return
 		case <-timer.C:
 			// Process new blocks
-			err := ProcessLatestBlocks(ctx, sugar, client, dbConn, q, chain, rdb)
+			err := ProcessLatestBlocks(ctx, sugar, client, dbConn, chain, rdb)
 			if err != nil {
 				sugar.Errorw("Error processing latest blocks", "err", err)
 				return
@@ -78,11 +78,12 @@ func AddBackfillCrawlerTask(ctx context.Context, sugar *zap.SugaredLogger, clien
 			if err != nil {
 				log.Fatalf("could not enqueue task: %v", err)
 			}
+			timer.Reset(time.Duration(chain.BlockTime) * time.Millisecond)
 		}
 	}
 }
 
-func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *EvmRPCClient, dbConn *sql.DB, q *db.Queries, chain *db.Chain, rdb *redis.Client) error {
+func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *EvmRPCClient, dbConn *db.DBManager, chain *db.Chain, rdb *redis.Client) error {
 	// Get latest block number with retries
 	latest, err := helpers.RetryWithBackoff(ctx, sugar, config.MaxRetriesAttempt, "fetch latest block number", func() (uint64, error) {
 		return client.EthClient.BlockNumber(ctx)
@@ -95,14 +96,14 @@ func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *
 	c, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	tx, err := dbConn.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	tx, err := dbConn.CrawlerDB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		sugar.Errorw("Failed to start transaction", "err", err)
 		return err
 	}
 	defer tx.Rollback()
 
-	qtx := q.WithTx(tx)
+	qtx := dbConn.CrQueries.WithTx(tx)
 	latestUpdatedBlock := chain.LatestBlock
 	// Process each block between
 	for i := chain.LatestBlock + 1; i <= int64(latest) && i <= chain.LatestBlock+config.ProcessBatchBlocksLimit; i++ {
@@ -1286,10 +1287,17 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 		ChainID:   contractType[chain.ID][l.Address.Hex()].ChainID,
 		TxHash:    l.TxHash.Hex(),
 	})
+	if err != nil {
+		sugar.Errorw("Failed to create order", "err", err)
+		return err
+	}
 
 	// publish to redis queue
 	if rc != nil {
-		_ = rc.Publish(ctx, "order_queue", order).Err()
+		go func() {
+			orderBytes, _ := json.Marshal(order)
+			_ = rc.Publish(ctx, config.FillOrderChannel, orderBytes).Err()
+		}()
 	}
 
 	return nil
@@ -1329,23 +1337,33 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 		ChainID:   contractType[chain.ID][l.Address.Hex()].ChainID,
 		TxHash:    l.TxHash.Hex(),
 	})
+	if err != nil {
+		sugar.Errorw("Failed to create order", "err", err)
+		return err
+	}
 
 	// publish to redis queue
 	if rc != nil {
-		_ = rc.Publish(ctx, "order_queue", order).Err()
+		go func() {
+			orderBytes, _ := json.Marshal(order)
+			_ = rc.Publish(ctx, config.CancelOrderChannel, orderBytes).Err()
+		}()
 	}
 
 	return nil
 }
 
 func handleExchangeBackfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.Queries, client *ethclient.Client,
-	chain *db.Chain, logs []utypes.Log) error {
+	chain *db.Chain, logs []utypes.Log, rc *redis.Client) error {
 	if len(logs) == 0 {
 		return nil
 	}
 
 	for _, l := range logs {
-		blk, err := client.BlockByNumber(ctx, big.NewInt(int64(l.BlockNumber)))
+		blk, err := helpers.RetryWithBackoff(ctx, sugar, config.MaxRetriesAttempt, "fetch latest block number", func() (*utypes.Block, error) {
+			return client.BlockByNumber(ctx, big.NewInt(int64(l.BlockNumber)))
+		})
+		//blk, err := client.BlockByNumber(ctx, big.NewInt(int64(l.BlockNumber)))
 		if err != nil {
 			sugar.Errorw("Failed to get block by number", "err", err)
 			return err
@@ -1354,9 +1372,9 @@ func handleExchangeBackfill(ctx context.Context, sugar *zap.SugaredLogger, q *db
 
 		switch l.Topics[0].Hex() {
 		case utils.FillOrderSig:
-			_ = handleFillOrder(ctx, sugar, q, client, chain, nil, &l, ts)
+			_ = handleFillOrder(ctx, sugar, q, client, chain, rc, &l, ts)
 		case utils.CancelOrderSig:
-			_ = handleCancelOrder(ctx, sugar, q, client, chain, nil, &l, ts)
+			_ = handleCancelOrder(ctx, sugar, q, client, chain, rc, &l, ts)
 		}
 	}
 
