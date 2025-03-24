@@ -104,9 +104,9 @@ func startWorker(cmd *cobra.Command, args []string) {
 				return
 			case <-timer.C:
 				var wg sync.WaitGroup
-				iterCtx, cancel := context.WithCancel(ctx)
+				iterCtx, iterCancel := context.WithCancel(ctx)
 				// redis subscribe to new assets channel to restart the crawler
-				go subscribeToNewAsset(iterCtx, sugar, cancel, &wg, rdb)
+				go subscribeToNewAsset(iterCtx, sugar, iterCancel, &wg, rdb)
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
@@ -173,6 +173,12 @@ func InitBackfillProcessor(ctx context.Context, sugar *zap.SugaredLogger, q *dbC
 		if err := srv.Run(mux); err != nil && err != asynq.ErrServerClosed {
 			log.Fatalf("could not run server: %v", err)
 		}
+	}
+
+	// wait context done signal
+	if len(chains) == 0 {
+		sugar.Info("No chain to crawl, wait until new chain is added")
+		<-ctx.Done()
 	}
 
 	return nil
