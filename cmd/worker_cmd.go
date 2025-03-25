@@ -353,7 +353,6 @@ func (p *BackfillProcessor) ProcessTask(ctx context.Context, t *asynq.Task) erro
 		handleExchangeBackfill(ctx, p.sugar, q, p.ethClient, p.chain, logs, p.rdb)
 	}
 
-	p.sugar.Infow("blocks", "currentBlock", bf.CurrentBlock, "toScanBlock", toScanBlock)
 	bf.CurrentBlock = toScanBlock
 
 	err = q.UpdateCrawlingBackfill(ctx, dbCon.UpdateCrawlingBackfillParams{
