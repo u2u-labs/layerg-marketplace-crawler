@@ -108,10 +108,10 @@ func startCrawler(cmd *cobra.Command, args []string) {
 			sugar.Infow("Crawler stopped")
 			return
 		case <-timer.C:
+			logger.Info("Retrieving new chains and assets")
 			var wg sync.WaitGroup
 			iterCtx, cancel := context.WithCancel(ctx)
 			// redis subscribe to new assets channel to restart the crawler
-			go subscribeToNewAsset(iterCtx, sugar, cancel, &wg, rdb)
 
 			// Process new chains
 			ProcessNewChains(iterCtx, sugar, dbStore, rdb, &wg)
@@ -120,9 +120,10 @@ func startCrawler(cmd *cobra.Command, args []string) {
 			// Process backfill collection
 			ProcessCrawlingBackfillCollection(iterCtx, sugar, dbStore.CrQueries, rdb, queueClient, &wg)
 
+			subscribeToNewAsset(iterCtx, sugar, cancel, &wg, rdb)
+
 			wg.Wait()
 
-			cancel()
 			timer.Reset(config.RetriveAddedChainsAndAssetsInterval)
 		}
 	}
@@ -264,6 +265,8 @@ func ProcessCrawlingBackfillCollection(ctx context.Context, sugar *zap.SugaredLo
 		wg.Add(1)
 		go func(bf dbCon.GetCrawlingBackfillCrawlerRow) {
 			defer wg.Done()
+			sugar.Infow("Initiated new backfill collection, start crawling", "chain", chain.ChainID,
+				"collection", c.CollectionAddress, "from", c.InitialBlock, "status", c.Status, "interval", c.BlockScanInterval.Int64)
 			AddBackfillCrawlerTask(ctx, sugar, client, q, &chain, &bf, queueClient)
 		}(c)
 	}
@@ -381,6 +384,7 @@ func subscribeToNewAsset(ctx context.Context, sugar *zap.SugaredLogger, cancel c
 	defer ps.Close()
 	ch := ps.Channel()
 
+	sugar.Info("Subscribed to new asset channel")
 	for {
 		select {
 		case <-ctx.Done():

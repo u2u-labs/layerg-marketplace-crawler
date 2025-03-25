@@ -115,5 +115,8 @@ func serveApi(db *dbCon.Queries, rdb *redis.Client, rawDb *sql.DB, ctx context.C
 
 	// Run the server
 
-	router.Run(viper.GetString("API_PORT"))
+	err := router.Run(viper.GetString("API_PORT"))
+	if err != nil {
+		panic(err)
+	}
 }

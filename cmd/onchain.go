@@ -70,6 +70,17 @@ func AddBackfillCrawlerTask(ctx context.Context, sugar *zap.SugaredLogger, clien
 			sugar.Infow("Stopping backfill crawler", "chain", chain, "block", bf.CurrentBlock)
 			return
 		case <-timer.C:
+			newBf, err := q.GetCrawlingBackfillCrawlerById(ctx, db.GetCrawlingBackfillCrawlerByIdParams{
+				ChainID:           bf.ChainID,
+				CollectionAddress: bf.CollectionAddress,
+			})
+			if err != nil {
+				log.Fatalf("Error getting backfill crawler: %v", err)
+			}
+			if bf.CurrentBlock < newBf.CurrentBlock {
+				bf.CurrentBlock = newBf.CurrentBlock
+			}
+
 			task, err := NewBackfillCollectionTask(bf)
 			if err != nil {
 				log.Fatalf("could not create task: %v", err)
