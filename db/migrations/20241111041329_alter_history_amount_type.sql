@@ -3,8 +3,8 @@
 -- SET enable_experimental_alter_column_type_general = true;
 
 -- +goose StatementBegin
--- Add a new column with the desired type
-ALTER TABLE onchain_histories ADD COLUMN amount_new DECIMAL(60,18);
+-- Copy data with explicit casting
+UPDATE onchain_histories SET amount_new = amount::DECIMAL(60,18);
 
 -- +goose StatementEnd
 

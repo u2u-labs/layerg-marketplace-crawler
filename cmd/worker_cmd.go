@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/big"
 	"os"
 	"os/signal"
@@ -113,7 +112,8 @@ func startWorker(cmd *cobra.Command, args []string) {
 					InitBackfillProcessor(iterCtx, sugar, sqlDb, rdb, queueClient, dbStore)
 				}()
 				wg.Wait()
-				timer.Reset(config.BackfillTimeInterval)
+				timer.Reset(time.Nanosecond)
+				sugar.Info("Backfill process loop finished")
 			}
 		}
 	}()
@@ -127,6 +127,10 @@ func startWorker(cmd *cobra.Command, args []string) {
 }
 
 func InitBackfillProcessor(ctx context.Context, sugar *zap.SugaredLogger, q *dbCon.Queries, rdb *redis.Client, queueClient *asynq.Client, dbStore *dbCon.DBManager) error {
+	// Create a cancellable context
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	err := crawlSupportedChains(ctx, sugar, dbStore, rdb, false)
 	if err != nil {
 		sugar.Errorw("Error init supported chains", "err", err)
@@ -138,49 +142,93 @@ func InitBackfillProcessor(ctx context.Context, sugar *zap.SugaredLogger, q *dbC
 	if err != nil {
 		return err
 	}
-	for _, chain := range chains {
-		client, err := initChainClient(&chain)
-		if err != nil {
-			return err
-		}
 
-		// handle queue
-		srv := asynq.NewServer(
-			asynq.RedisClientOpt{Addr: viper.GetString("REDIS_DB_URL")},
-			asynq.Config{
-				Concurrency: config.WorkerConcurrency,
-			},
-		)
-
-		// mux maps a type to a handler
-		mux := asynq.NewServeMux()
-		taskName := BackfillCollection + ":" + strconv.Itoa(int(chain.ID))
-		mux.Handle(taskName, NewBackfillProcessor(sugar, client, q, &chain, rdb, dbStore))
-
-		c := make(chan os.Signal, 1)
-		// Trigger graceful shutdown on SIGINT or SIGTERM.
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
-		go func() {
-			select {
-			case <-ctx.Done():
-				srv.Shutdown()
-			case <-c:
-				srv.Shutdown()
-			}
-		}()
-
-		if err := srv.Run(mux); err != nil && err != asynq.ErrServerClosed {
-			log.Fatalf("could not run server: %v", err)
-		}
-	}
-
-	// wait context done signal
+	// If no chains, wait and exit
 	if len(chains) == 0 {
 		sugar.Info("No chain to crawl, wait until new chain is added")
 		<-ctx.Done()
+		sugar.Info("Backfill collection processor stopped")
+		return nil
 	}
 
+	// Channel to coordinate shutdown
+	shutdownComplete := make(chan struct{})
+
+	// Error channel
+	errChan := make(chan error, len(chains))
+
+	// Waitgroup for all processors
+	var wg sync.WaitGroup
+
+	// Process each chain
+	for _, chain := range chains {
+		wg.Add(1)
+		go func(chain dbCon.Chain) {
+			defer wg.Done()
+
+			// Create a per-chain context
+			chainCtx, chainCancel := context.WithCancel(ctx)
+			defer chainCancel()
+
+			client, err := initChainClient(&chain)
+			if err != nil {
+				errChan <- fmt.Errorf("failed to init client for chain %d: %v", chain.ID, err)
+				return
+			}
+
+			// handle queue
+			srv := asynq.NewServer(
+				asynq.RedisClientOpt{Addr: viper.GetString("REDIS_DB_URL")},
+				asynq.Config{
+					Concurrency: config.WorkerConcurrency,
+				},
+			)
+
+			// mux maps a type to a handler
+			mux := asynq.NewServeMux()
+			taskName := BackfillCollection + ":" + strconv.Itoa(int(chain.ID))
+			mux.Handle(taskName, NewBackfillProcessor(sugar, client, q, &chain, rdb, dbStore))
+
+			// Shutdown listener
+			go func() {
+				<-chainCtx.Done()
+				sugar.Infow("Shutting down server for chain", "chain_id", chain.ChainID)
+				srv.Shutdown()
+			}()
+
+			// Run server
+			if err := srv.Run(mux); err != nil && err != asynq.ErrServerClosed {
+				errChan <- fmt.Errorf("could not run server for chain %d: %v", chain.ID, err)
+			}
+		}(chain)
+	}
+
+	// Error and shutdown monitoring
+	go func() {
+		// Wait for all processors to complete
+		wg.Wait()
+
+		// Close error channel
+		close(errChan)
+
+		// Signal complete shutdown
+		close(shutdownComplete)
+	}()
+
+	// Wait for either context cancellation or shutdown
+	select {
+	case <-ctx.Done():
+		sugar.Info("Context cancelled, shutting down")
+	case err := <-errChan:
+		if err != nil {
+			sugar.Errorw("Error in backfill processor", "err", err)
+			return err
+		}
+	case <-shutdownComplete:
+		sugar.Info("All processors completed")
+	}
+
+	sugar.Info("Backfill collection processor stopped")
 	return nil
 }
 

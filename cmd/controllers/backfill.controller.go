@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -53,6 +54,14 @@ func (bfc *BackFillController) AddBackFillTracker(ctx *gin.Context) {
 		return
 	}
 
-	_ = bfc.rdb.Publish(bfc.ctx, config.NewAssetChannel, "ok").Err()
-	fmt.Println("New asset added to db", "ok")
+	go func() {
+		jsonBytes, err := json.Marshal(params)
+		if err != nil {
+			fmt.Println("Error marshaling asset:", err)
+			return
+		}
+		_ = bfc.rdb.Publish(bfc.ctx, config.NewAssetChannel, jsonBytes).Err()
+		fmt.Println("New asset added to db", params)
+	}()
+
 }

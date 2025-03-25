@@ -103,8 +103,15 @@ func (as *AssetService) AddNewAsset(ctx *gin.Context) {
 		return
 	}
 
-	_ = as.rdb.Publish(as.ctx, config.NewAssetChannel, jsonResponse).Err()
-	fmt.Println("New asset added to db", jsonResponse)
+	go func() {
+		jsonBytes, err := json.Marshal(assetParam)
+		if err != nil {
+			fmt.Println("Error marshaling asset:", err)
+			return
+		}
+		_ = as.rdb.Publish(as.ctx, config.NewAssetChannel, jsonBytes).Err()
+		fmt.Println("New asset added to db", jsonResponse)
+	}()
 
 	response.SuccessReponseData(ctx, http.StatusCreated, jsonResponse)
 }

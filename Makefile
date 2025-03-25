@@ -1,11 +1,15 @@
-GOOSE_DRIVER='postgres'
-GOOSE_DBSTRING='postgres://root:admin@localhost:26257/marketplace_crawler?sslmode=disable'
-GOOSE_MIGRATION_DIR='./db/migrations'
-GOOSE_DEFAULT_DBSTRING=postgres://root:admin@localhost:26257/defaultdb?sslmode=disable
+# Load environment variables from .env file
+-include .env
+export
 
-GOOSE_MKP_DEFAULT_DBSTRING=postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
-GOOSE_MKP_DBSTRING='postgres://postgres:postgres@localhost:5432/marketplace?sslmode=disable'
-GOOSE_MKP_MIGRATION_DIR='./db/migrations/marketplace'
+GOOSE_DRIVER?='postgres'
+GOOSE_DBSTRING?='postgres://root:admin@localhost:26257/marketplace_crawler?sslmode=disable'
+GOOSE_MIGRATION_DIR?='./db/migrations'
+GOOSE_DEFAULT_DBSTRING?=postgres://root:admin@localhost:26257/defaultdb?sslmode=disable
+
+GOOSE_MKP_DEFAULT_DBSTRING?=postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+GOOSE_MKP_DBSTRING?='postgres://postgres:postgres@localhost:5432/marketplace?sslmode=disable'
+GOOSE_MKP_MIGRATION_DIR?='./db/migrations/marketplace'
 
 build:
 	go build -ldflags -w
@@ -27,7 +31,7 @@ worker:
 #crawler db
 create-db:
 	@echo "Creating database marketplace_crawler..."
-	@cockroach sql --url "$(GOOSE_DEFAULT_DBSTRING)" -e "CREATE DATABASE IF NOT EXISTS marketplace_crawler" || true
+	@psql "$(GOOSE_DEFAULT_DBSTRING)" -c "SELECT 1 FROM pg_database WHERE datname = 'marketplace_crawler'" | grep -q 1 || psql "$(GOOSE_DEFAULT_DBSTRING)" -c "CREATE DATABASE marketplace_crawler"
 
 create-db-marketplace:
 	@echo "Creating database marketplace..."
