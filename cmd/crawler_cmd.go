@@ -135,7 +135,9 @@ func ProcessNewChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn *dbC
 		sugar.Errorw("ProcessNewChains failed to get cached pending chains", "err", err)
 		return
 	}
+	sugar.Infow("Retrieved pending chains", "chains", chains)
 	for _, c := range chains {
+		sugar.Infow("Processing new chain", "chain", c)
 		client, err := initChainClient(&c)
 
 		if err != nil {
