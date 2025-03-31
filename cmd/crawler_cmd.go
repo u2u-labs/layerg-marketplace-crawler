@@ -135,10 +135,6 @@ func ProcessNewChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn *dbC
 		sugar.Errorw("ProcessNewChains failed to get cached pending chains", "err", err)
 		return
 	}
-	if err = db.DeletePendingChainsInCache(ctx, rdb); err != nil {
-		sugar.Errorw("ProcessNewChains failed to delete cached pending chains", "err", err)
-		return
-	}
 	for _, c := range chains {
 		client, err := initChainClient(&c)
 
@@ -167,10 +163,6 @@ func ProcessNewChainAssets(ctx context.Context, sugar *zap.SugaredLogger, rdb *r
 		sugar.Errorw("ProcessNewChainAssets failed to get cached pending assets", "err", err)
 		return
 	}
-	if err = db.DeletePendingAssetsInCache(ctx, rdb); err != nil {
-		sugar.Errorw("ProcessNewChainAssets failed to delete cached pending assets", "err", err)
-		return
-	}
 	for _, a := range assets {
 		if contractType[a.ChainID] == nil {
 			contractType[a.ChainID] = make(map[string]dbCon.Asset)
@@ -190,6 +182,17 @@ func crawlSupportedChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn 
 	if err != nil {
 		return err
 	}
+	if err = db.DeletePendingChainsInCache(ctx, rdb); err != nil {
+		sugar.Errorw("ProcessNewChains failed to delete cached pending chains", "err", err)
+	} else {
+		sugar.Infow("Pruned cached pending chains")
+	}
+	if err = db.DeletePendingAssetsInCache(ctx, rdb); err != nil {
+		sugar.Errorw("ProcessNewChainAssets failed to delete cached pending assets", "err", err)
+	} else {
+		sugar.Infow("Pruned cached pending assets")
+	}
+
 	for _, c := range chains {
 		contractType[c.ID] = make(map[string]dbCon.Asset)
 		if err = db.DeleteChainInCache(ctx, rdb, c.ID); err != nil {
