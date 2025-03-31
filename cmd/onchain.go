@@ -756,6 +756,7 @@ func handleErc721Transfer(ctx context.Context, sugar *zap.SugaredLogger, q *db.Q
 	}
 	var uri string
 	var owner common.Address
+	sugar.Infow("results", "results", results, "tokenIdSet", tokenIdSet.GetTokenIds(), "event", event)
 	utils.ERC721ABI.UnpackIntoInterface(&uri, "tokenURI", common.FromHex(results[0]))
 	utils.ERC721ABI.UnpackIntoInterface(&owner, "ownerOf", common.FromHex(results[1]))
 	attrs := make(map[string]string)
