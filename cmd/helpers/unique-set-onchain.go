@@ -61,7 +61,7 @@ func NewTokenIdSet() *TokenIdSet {
 
 // AddTokenId adds a new token ID to the set if it doesn't already exist
 func (t *TokenIdSet) AddTokenId(tokenId *big.Int) {
-	if tokenId == nil || tokenId.Cmp(big.NewInt(0)) == 0 {
+	if tokenId == nil {
 		return
 	}
 
