@@ -8,7 +8,6 @@ services:
     container_name: layerg-crawler
     restart: always
     depends_on:
-      - crdb
       - pqdb
     command: "--config config.yaml"
     volumes:
@@ -24,7 +23,6 @@ services:
     container_name: layerg-api
     restart: always
     depends_on:
-      - crdb
       - pqdb
     ports:
       - 8085:8085
@@ -42,7 +40,6 @@ services:
     container_name: layerg-worker
     restart: always
     depends_on:
-      - crdb
       - pqdb
     command: "worker --config config.yaml"
     volumes:
@@ -51,14 +48,6 @@ services:
       driver: "json-file"
       options:
         max-size: 300m
-  crdb:
-    image: cockroachdb/cockroach:v24.2.1
-    ports:
-      - "26957:26257"
-      - "8820:8080"
-    command: start-single-node --insecure
-    volumes:
-      - ../data/crdb:/cockroach/cockroach-data
   pqdb:
     image: postgres:15
     ports:
@@ -66,9 +55,22 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: marketplace
+      POSTGRES_DB: postgres
     volumes:
       - ../data/pqdb:/var/lib/postgresql/data
+  migrate:
+    image: u2labs/layerg-crawler:latest
+    depends_on:
+      pqdb:
+        condition: service_healthy
+    volumes:
+      - ./config.yaml:/go/bin/config.yaml
+      - ./db/migrations:/go/src/github.com/u2u-labs/layerg-crawler/db/migrations
+    command: >
+      sh -c "make migrate-up-marketplace"
+    environment:
+      - GOOSE_DRIVER=postgres
+      - GOOSE_MKP_DBSTRING=postgres://postgres:${POSTGRES_PASSWORD}@pqdb:5432/marketplace
   redis:
     image: bitnami/redis:latest
     environment:

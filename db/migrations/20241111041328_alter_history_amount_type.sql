@@ -4,7 +4,7 @@
 
 -- +goose StatementBegin
 -- Add a new column with the desired type
-ALTER TABLE onchain_histories ADD COLUMN amount_new DECIMAL(60,18);
+ALTER TABLE onchain_histories ADD COLUMN amount_new DECIMAL(60,18) NOT NULL DEFAULT 0;
 
 -- +goose StatementEnd
 
