@@ -30,24 +30,23 @@ CREATE TABLE IF NOT EXISTS "NFT"
 
 CREATE TABLE IF NOT EXISTS "Collection"
 (
-    "id"             UUID             NOT NULL,
-    "txCreationHash" TEXT             NOT NULL,
-    "name"           TEXT             NOT NULL,
+    "id"             UUID             NOT NULL DEFAULT gen_random_uuid(),
+    "txCreationHash" TEXT UNIQUE,
+    "name"           TEXT             NOT NULL UNIQUE,
     "nameSlug"       TEXT,
     "symbol"         TEXT             NOT NULL,
     "description"    TEXT,
-    "address"        TEXT,
-    "shortUrl"       TEXT,
+    "address"        TEXT UNIQUE,
+    "shortUrl"       TEXT UNIQUE,
     "metadata"       TEXT,
     "isU2U"          BOOLEAN          NOT NULL DEFAULT true,
     "status"         TEXT             NOT NULL,
     "type"           TEXT             NOT NULL,
-    "categoryId"     INTEGER,
     "createdAt"      TIMESTAMP(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt"      TIMESTAMP(3)     NOT NULL,
+    "updatedAt"      TIMESTAMP(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "coverImage"     TEXT,
     "avatar"         TEXT,
-    "projectId"      UUID,
+    "projectId"      UUID UNIQUE,
     "isVerified"     BOOLEAN          NOT NULL DEFAULT false,
     "floorPrice"     BIGINT           NOT NULL DEFAULT 0,
     "floor"          DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -88,12 +87,17 @@ CREATE TABLE IF NOT EXISTS "Collection"
     "metadataJson"   JSONB,
     "gameLayergId"   TEXT,
     "source"         TEXT,
-    "categoryG"      JSONB,
     "vol"            DOUBLE PRECISION NOT NULL DEFAULT 0,
     "volumeWei"      TEXT             NOT NULL DEFAULT '0',
+    "chainId"        BIGINT           NOT NULL DEFAULT 0,
+    "totalAssets"    INTEGER          NOT NULL DEFAULT 0,
 
-    CONSTRAINT "Collection_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Collection_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "Collection_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE SET NULL,
+    CONSTRAINT "Collection_chainId_fkey" FOREIGN KEY ("chainId") REFERENCES "Chain" ("chainId") ON DELETE CASCADE,
+    CONSTRAINT "Collection_gameLayergId_fkey" FOREIGN KEY ("gameLayergId") REFERENCES "GameLayerg" ("id") ON DELETE SET NULL
 );
+
 
 CREATE TABLE IF NOT EXISTS "AnalysisCollection"
 (
