@@ -38,6 +38,7 @@ create-db-marketplace:
 	@psql "$(GOOSE_MKP_DEFAULT_DBSTRING)" -c "SELECT 1 FROM pg_database WHERE datname = 'marketplace'" | grep -q 1 || psql "$(GOOSE_MKP_DEFAULT_DBSTRING)" -c "CREATE DATABASE marketplace"
 
 migrate-up: create-db migrate-up-marketplace
+	@echo "migrate up crawler $(GOOSE_DBSTRING) $(GOOSE_MIGRATION_DIR)"
 	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_DBSTRING) goose -dir $(GOOSE_MIGRATION_DIR) up-to 20250319042110
 migrate-down:
 	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_DBSTRING) goose -dir $(GOOSE_MIGRATION_DIR) down
@@ -46,6 +47,7 @@ migrate-reset:
 
 migrate-up-marketplace: create-db-marketplace
 	@echo "Checking and upserting default record in goose_db_version..."
+	@echo "migrate up marketplace $(GOOSE_MKP_DBSTRING) $(GOOSE_MKP_MIGRATION_DIR)"
 	@psql $(GOOSE_MKP_DBSTRING) -c "INSERT INTO \"goose_db_version\" (id, version_id, is_applied, tstamp) VALUES (0, 0, true, now()) ON CONFLICT (id) DO NOTHING;" || true
 	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_MKP_DBSTRING) goose -dir $(GOOSE_MKP_MIGRATION_DIR) up-to 20250305083624
 migrate-down-marketplace:

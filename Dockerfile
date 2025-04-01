@@ -14,7 +14,12 @@ RUN apk add ca-certificates curl
 #RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.14.1/migrate.linux-amd64.tar.gz | tar xvz
 #RUN mv migrate.linux-amd64 /usr/bin/migrate
 ENV PATH="${PATH}:/go/bin"
+
 WORKDIR /go/bin
+
 COPY --from=builder /go/bin/* /go/bin/
+
+COPY .layerg-crawler.yaml /go/bin/.layerg-crawler.yaml
+
 ENTRYPOINT ["./layerg-crawler"]
 

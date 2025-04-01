@@ -1,0 +1,28 @@
+# Build Stage
+FROM golang:1.24.1-alpine AS builder
+
+# Install dependencies required to build the project and go dependencies
+RUN apk add --no-cache build-base cmake gcc git make postgresql-client
+
+WORKDIR /app
+COPY . .
+
+# Install goose CLI tool globally
+RUN go install github.com/pressly/goose/v3/cmd/goose@latest
+
+# Runtime Stage
+FROM alpine:3.18
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates curl postgresql-client make bash
+
+WORKDIR /app
+
+# Copy application and installed binaries from the builder stage
+COPY --from=builder /app /app
+
+# Ensure the goose binary is available in the PATH by copying it explicitly
+COPY --from=builder /go/bin/goose /usr/local/bin/goose
+
+# Set the default entry point for your app to run `make`
+ENTRYPOINT ["make"]
