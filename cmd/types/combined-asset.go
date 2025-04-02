@@ -30,4 +30,7 @@ type FulfillOrderEvent struct {
 	PriceWei     string  `json:"priceWei"`
 	Price        float64 `json:"price"`
 	Timestamp    int64   `json:"timestamp"`
+	OrderIndex   int32   `json:"orderIndex"`
+	OrderSig     string  `json:"orderSig"`
+	FilledQty    int32   `json:"filledQty"`
 }
