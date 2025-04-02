@@ -8,7 +8,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,45 +16,43 @@ import (
 const upsertNFT = `-- name: UpsertNFT :one
 INSERT INTO "NFT" ("id", name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash",
                    "creatorId", "collectionId", image, description, "animationUrl",
-                   "nameSlug", "metricPoint", "metricDetail", source, "ownerId")
+                   "nameSlug", source, "ownerId", "slug")
 VALUES ($1, $2, $3, $4, $5, $6, $7,
         $8, $9, $10, $11, $12, $13,
-        $14, $15, $16, $17)
+        $14, $15, $16)
 ON CONFLICT ("id", "collectionId")
     DO UPDATE SET name             = EXCLUDED.name,
                   "updatedAt"      = CURRENT_TIMESTAMP,
                   status           = EXCLUDED.status,
                   "tokenUri"       = EXCLUDED."tokenUri",
-                  "txCreationHash" = EXCLUDED."txCreationHash",
                   "creatorId"      = EXCLUDED."creatorId",
                   image            = EXCLUDED.image,
                   description      = EXCLUDED.description,
                   "animationUrl"   = EXCLUDED."animationUrl",
                   "nameSlug"       = EXCLUDED."nameSlug",
-                  "metricPoint"    = EXCLUDED."metricPoint",
                   source           = EXCLUDED.source,
-                  "ownerId"        = EXCLUDED."ownerId"
-RETURNING id, name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash", "creatorId", "collectionId", image, "isActive", description, "animationUrl", "nameSlug", "metricPoint", "metricDetail", source, "ownerId"
+                  "ownerId"        = EXCLUDED."ownerId",
+                  "slug"           = EXCLUDED."slug"
+RETURNING id, name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash", "creatorId", "collectionId", image, "isActive", description, "animationUrl", "nameSlug", "metricPoint", "metricDetail", source, "ownerId", slug
 `
 
 type UpsertNFTParams struct {
-	ID             string          `json:"id"`
-	Name           string          `json:"name"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	UpdatedAt      time.Time       `json:"updatedAt"`
-	Status         string          `json:"status"`
-	TokenUri       string          `json:"tokenUri"`
-	TxCreationHash string          `json:"txCreationHash"`
-	CreatorId      uuid.NullUUID   `json:"creatorId"`
-	CollectionId   uuid.UUID       `json:"collectionId"`
-	Image          sql.NullString  `json:"image"`
-	Description    sql.NullString  `json:"description"`
-	AnimationUrl   sql.NullString  `json:"animationUrl"`
-	NameSlug       sql.NullString  `json:"nameSlug"`
-	MetricPoint    int64           `json:"metricPoint"`
-	MetricDetail   json.RawMessage `json:"metricDetail"`
-	Source         sql.NullString  `json:"source"`
-	OwnerId        string          `json:"ownerId"`
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	Status         string         `json:"status"`
+	TokenUri       string         `json:"tokenUri"`
+	TxCreationHash string         `json:"txCreationHash"`
+	CreatorId      uuid.NullUUID  `json:"creatorId"`
+	CollectionId   uuid.UUID      `json:"collectionId"`
+	Image          sql.NullString `json:"image"`
+	Description    sql.NullString `json:"description"`
+	AnimationUrl   sql.NullString `json:"animationUrl"`
+	NameSlug       sql.NullString `json:"nameSlug"`
+	Source         sql.NullString `json:"source"`
+	OwnerId        string         `json:"ownerId"`
+	Slug           sql.NullString `json:"slug"`
 }
 
 func (q *Queries) UpsertNFT(ctx context.Context, arg UpsertNFTParams) (NFT, error) {
@@ -73,10 +70,9 @@ func (q *Queries) UpsertNFT(ctx context.Context, arg UpsertNFTParams) (NFT, erro
 		arg.Description,
 		arg.AnimationUrl,
 		arg.NameSlug,
-		arg.MetricPoint,
-		arg.MetricDetail,
 		arg.Source,
 		arg.OwnerId,
+		arg.Slug,
 	)
 	var i NFT
 	err := row.Scan(
@@ -98,6 +94,7 @@ func (q *Queries) UpsertNFT(ctx context.Context, arg UpsertNFTParams) (NFT, erro
 		&i.MetricDetail,
 		&i.Source,
 		&i.OwnerId,
+		&i.Slug,
 	)
 	return i, err
 }

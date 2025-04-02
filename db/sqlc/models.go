@@ -306,6 +306,7 @@ type NFT struct {
 	MetricDetail   json.RawMessage `json:"metricDetail"`
 	Source         sql.NullString  `json:"source"`
 	OwnerId        string          `json:"ownerId"`
+	Slug           sql.NullString  `json:"slug"`
 }
 
 type OnchainHistory struct {

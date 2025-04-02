@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS "NFT"
     }'::jsonb,
     source           TEXT,
     "ownerId"        TEXT      NOT NULL,
+    slug             TEXT,
     UNIQUE ("id", "collectionId")
 );
 
