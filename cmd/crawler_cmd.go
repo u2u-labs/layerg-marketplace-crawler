@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/u2u-labs/layerg-crawler/cmd/helpers"
 	"github.com/u2u-labs/layerg-crawler/cmd/libs"
@@ -354,10 +355,16 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		return err
 	}
 
+	slugId, err := gonanoid.New(8)
+	if err != nil {
+		return err
+	}
+	// name = symbol#unix timestamp
+	// slug = symbol-shortid
 	// upsert nft to layerg marketplace db
 	upsertedNft, err := dbStore.MpQueries.UpsertNFT(ctx, dbCon.UpsertNFTParams{
 		ID:             payload.TokenID,
-		Name:           name,
+		Name:           fmt.Sprintf("%s#%s", col.Symbol, payload.TokenID),
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 		Status:         "SUCCESS",
@@ -369,8 +376,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		Description:    sql.NullString{Valid: true, String: description},
 		AnimationUrl:   sql.NullString{Valid: true, String: animationUrl},
 		NameSlug:       sql.NullString{Valid: true, String: name},
-		MetricPoint:    0,
-		MetricDetail:   []byte("{}"),
+		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", col.Symbol, slugId)},
 		Source:         sql.NullString{Valid: true, String: "crawler"},
 		OwnerId:        payload.Owner,
 	})
@@ -565,8 +571,11 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 
 	// send to sqs
 	orderPayload := types.FulfillOrderEvent{
-		GameId:       collection.GameLayergId.String,
+		OrderIndex:   order.Index,
+		OrderSig:     order.Sig,
+		FilledQty:    order.FilledQty,
 		CollectionId: collection.ID.String(),
+		GameId:       collection.GameLayergId.String,
 		Amount:       order.FilledQty,
 		NftId:        order.TokenId,
 		QuoteToken:   order.QuoteToken,
