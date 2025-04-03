@@ -25,14 +25,10 @@ ON CONFLICT ("id", "collectionId")
                   "updatedAt"      = CURRENT_TIMESTAMP,
                   status           = EXCLUDED.status,
                   "tokenUri"       = EXCLUDED."tokenUri",
-                  "creatorId"      = EXCLUDED."creatorId",
                   image            = EXCLUDED.image,
                   description      = EXCLUDED.description,
                   "animationUrl"   = EXCLUDED."animationUrl",
-                  "nameSlug"       = EXCLUDED."nameSlug",
-                  source           = EXCLUDED.source,
-                  "ownerId"        = EXCLUDED."ownerId",
-                  "slug"           = EXCLUDED."slug"
+                  "ownerId"        = EXCLUDED."ownerId"
 RETURNING id, name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash", "creatorId", "collectionId", image, "isActive", description, "animationUrl", "nameSlug", "metricPoint", "metricDetail", source, "ownerId", slug
 `
 
