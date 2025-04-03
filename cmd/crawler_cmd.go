@@ -368,10 +368,17 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 	if err != nil {
 		return err
 	}
+
+	tx, err := dbStore.MarketplaceDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	q := dbStore.MpQueries.WithTx(tx)
 	// name = symbol#unix timestamp
 	// slug = symbol-shortid
 	// upsert nft to layerg marketplace db
-	upsertedNft, err := dbStore.MpQueries.UpsertNFT(ctx, dbCon.UpsertNFTParams{
+	upsertedNft, err := q.UpsertNFT(ctx, dbCon.UpsertNFTParams{
 		ID:             payload.TokenID,
 		Name:           fmt.Sprintf("%s#%s", col.Symbol, payload.TokenID),
 		CreatedAt:      time.Now(),
@@ -393,10 +400,27 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		return fmt.Errorf("failed to upsert NFT: %w", err)
 	}
 
+	// upsert activity
+	err = q.UpsertActivity(ctx, dbCon.UpsertActivityParams{
+		ID:           uuid.New().String(),
+		From:         strings.ToLower(payload.From),
+		To:           strings.ToLower(payload.To),
+		CollectionId: col.ID,
+		NftId:        payload.TokenID,
+		UserAddress:  strings.ToLower(payload.From),
+		Type:         "erc721_transfer",
+		Qty:          1,
+		Price:        sql.NullString{Valid: true, String: "0"},
+		CreatedAt:    time.Now(),
+	})
+	if err != nil {
+		logger.Errorw("failed to upsert activity", "error", err)
+	}
+
 	// check zero address
 	if payload.From != common.HexToAddress("0x0000000000000000000000000000000000000000").String() {
 		// delete ownership
-		err = dbStore.MpQueries.DeleteOwnership(ctx, dbCon.DeleteOwnershipParams{
+		err = q.DeleteOwnership(ctx, dbCon.DeleteOwnershipParams{
 			UserAddress: strings.ToLower(payload.From),
 			NftId: sql.NullString{
 				String: payload.TokenID,
@@ -410,7 +434,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 	}
 
 	// update ownership
-	_, err = dbStore.MpQueries.UpsertOwnership(ctx, dbCon.UpsertOwnershipParams{
+	_, err = q.UpsertOwnership(ctx, dbCon.UpsertOwnershipParams{
 		ID:           uuid.New().String(),
 		UserAddress:  strings.ToLower(payload.Owner),
 		NftId:        sql.NullString{Valid: true, String: payload.TokenID},
@@ -420,6 +444,11 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		UpdatedAt:    sql.NullTime{Valid: true, Time: time.Now()},
 		ChainId:      payload.ChainID,
 	})
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
 	if err != nil {
 		return err
 	}
@@ -575,6 +604,23 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 		return fmt.Errorf("failed to update collection volume: %w", err)
 	}
 
+	// upsert activity
+	err = q.UpsertActivity(ctx, dbCon.UpsertActivityParams{
+		ID:           uuid.New().String(),
+		From:         strings.ToLower(payload.Maker),
+		To:           strings.ToLower(payload.Taker.String),
+		CollectionId: collection.ID,
+		NftId:        order.TakeAssetId,
+		UserAddress:  strings.ToLower(payload.Maker),
+		Type:         "fill_order",
+		Qty:          order.FilledQty,
+		Price:        sql.NullString{Valid: true, String: order.Price},
+		CreatedAt:    time.Now(),
+	})
+	if err != nil {
+		return err
+	}
+
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
@@ -690,6 +736,23 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 	})
 	if err != nil {
 		return fmt.Errorf("failed to upsert NFT: %w", err)
+	}
+
+	// upsert activity
+	err = dbStore.MpQueries.UpsertActivity(ctx, dbCon.UpsertActivityParams{
+		ID:           uuid.New().String(),
+		From:         strings.ToLower(payload.From.String()),
+		To:           strings.ToLower(payload.To.String()),
+		CollectionId: col.ID,
+		NftId:        asset.TokenID,
+		UserAddress:  strings.ToLower(payload.From.String()),
+		Type:         "erc1155_transfer",
+		Qty:          int32(payload.Value.Int64()),
+		Price:        sql.NullString{Valid: true, String: "0"},
+		CreatedAt:    time.Now(),
+	})
+	if err != nil {
+		logger.Errorw("failed to upsert activity", "error", err)
 	}
 
 	tx, err := dbStore.MarketplaceDB.BeginTx(ctx, nil)
