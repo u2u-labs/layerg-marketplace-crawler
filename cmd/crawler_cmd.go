@@ -92,6 +92,17 @@ func startCrawler(cmd *cobra.Command, args []string) {
 		sugar.Errorw("Failed to parse EXCHANGE ABI", "err", err)
 	}
 
+	if err = db.DeletePendingChainsInCache(ctx, rdb); err != nil {
+		sugar.Errorw("ProcessNewChains failed to delete cached pending chains", "err", err)
+	} else {
+		sugar.Infow("Pruned cached pending chains")
+	}
+	if err = db.DeletePendingAssetsInCache(ctx, rdb); err != nil {
+		sugar.Errorw("ProcessNewChainAssets failed to delete cached pending assets", "err", err)
+	} else {
+		sugar.Infow("Pruned cached pending assets")
+	}
+
 	err = crawlSupportedChains(ctx, sugar, dbStore, rdb, true)
 	if err != nil {
 		sugar.Errorw("Error init supported chains", "err", err)
@@ -185,16 +196,6 @@ func crawlSupportedChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn 
 	chains, err := dbConn.CrQueries.GetAllChain(ctx)
 	if err != nil {
 		return err
-	}
-	if err = db.DeletePendingChainsInCache(ctx, rdb); err != nil {
-		sugar.Errorw("ProcessNewChains failed to delete cached pending chains", "err", err)
-	} else {
-		sugar.Infow("Pruned cached pending chains")
-	}
-	if err = db.DeletePendingAssetsInCache(ctx, rdb); err != nil {
-		sugar.Errorw("ProcessNewChainAssets failed to delete cached pending assets", "err", err)
-	} else {
-		sugar.Infow("Pruned cached pending assets")
 	}
 
 	for _, c := range chains {
