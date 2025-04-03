@@ -14,4 +14,6 @@ const (
 	CancelOrderChannel                  = "cancel_order"
 	PusherChannelOrder                  = "marketplace_order"
 	BackfillTimeInterval                = 2 * time.Second
+	Erc721TransferEvent                 = "erc721_transfer"
+	Erc1155TransferEvent                = "erc1155_transfer"
 )
