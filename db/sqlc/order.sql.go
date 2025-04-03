@@ -7,12 +7,19 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
 const getOrderBySignature = `-- name: GetOrderBySignature :one
-SELECT index, sig, "makerId", "makeAssetType", "makeAssetAddress", "makeAssetValue", "makeAssetId", "takerId", "takeAssetType", "takeAssetAddress", "takeAssetValue", "takeAssetId", salt, start, "end", "orderStatus", "orderType", root, proof, "tokenId", "collectionId", quantity, price, "priceNum", "netPrice", "netPriceNum", "createdAt", "updatedAt", "quoteToken", "filledQty" FROM "Order" WHERE "sig" = $1 AND "index" = $2
+SELECT "Order".index, "Order".sig, "Order"."makerId", "Order"."makeAssetType", "Order"."makeAssetAddress", "Order"."makeAssetValue", "Order"."makeAssetId", "Order"."takerId", "Order"."takeAssetType", "Order"."takeAssetAddress", "Order"."takeAssetValue", "Order"."takeAssetId", "Order".salt, "Order".start, "Order"."end", "Order"."orderStatus", "Order"."orderType", "Order".root, "Order".proof, "Order"."tokenId", "Order"."collectionId", "Order".quantity, "Order".price, "Order"."priceNum", "Order"."netPrice", "Order"."netPriceNum", "Order"."createdAt", "Order"."updatedAt", "Order"."quoteToken", "Order"."filledQty", maker.signer AS makerSigner, taker.signer AS takerSigner
+FROM "Order"
+    INNER JOIN "User" maker ON "Order"."makerId" = maker."id"
+    LEFT JOIN "User" taker ON "Order"."takerId" = taker."id"
+WHERE "sig" = $1 AND "index" = $2
 `
 
 type GetOrderBySignatureParams struct {
@@ -20,9 +27,44 @@ type GetOrderBySignatureParams struct {
 	Index int32  `json:"index"`
 }
 
-func (q *Queries) GetOrderBySignature(ctx context.Context, arg GetOrderBySignatureParams) (Order, error) {
+type GetOrderBySignatureRow struct {
+	Index            int32          `json:"index"`
+	Sig              string         `json:"sig"`
+	MakerId          uuid.UUID      `json:"makerId"`
+	MakeAssetType    int32          `json:"makeAssetType"`
+	MakeAssetAddress string         `json:"makeAssetAddress"`
+	MakeAssetValue   string         `json:"makeAssetValue"`
+	MakeAssetId      string         `json:"makeAssetId"`
+	TakerId          uuid.NullUUID  `json:"takerId"`
+	TakeAssetType    int32          `json:"takeAssetType"`
+	TakeAssetAddress string         `json:"takeAssetAddress"`
+	TakeAssetValue   string         `json:"takeAssetValue"`
+	TakeAssetId      string         `json:"takeAssetId"`
+	Salt             string         `json:"salt"`
+	Start            int32          `json:"start"`
+	End              int32          `json:"end"`
+	OrderStatus      string         `json:"orderStatus"`
+	OrderType        string         `json:"orderType"`
+	Root             string         `json:"root"`
+	Proof            []string       `json:"proof"`
+	TokenId          string         `json:"tokenId"`
+	CollectionId     uuid.UUID      `json:"collectionId"`
+	Quantity         int32          `json:"quantity"`
+	Price            string         `json:"price"`
+	PriceNum         float64        `json:"priceNum"`
+	NetPrice         string         `json:"netPrice"`
+	NetPriceNum      float64        `json:"netPriceNum"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	UpdatedAt        sql.NullTime   `json:"updatedAt"`
+	QuoteToken       string         `json:"quoteToken"`
+	FilledQty        int32          `json:"filledQty"`
+	Makersigner      string         `json:"makersigner"`
+	Takersigner      sql.NullString `json:"takersigner"`
+}
+
+func (q *Queries) GetOrderBySignature(ctx context.Context, arg GetOrderBySignatureParams) (GetOrderBySignatureRow, error) {
 	row := q.db.QueryRowContext(ctx, getOrderBySignature, arg.Sig, arg.Index)
-	var i Order
+	var i GetOrderBySignatureRow
 	err := row.Scan(
 		&i.Index,
 		&i.Sig,
@@ -54,6 +96,8 @@ func (q *Queries) GetOrderBySignature(ctx context.Context, arg GetOrderBySignatu
 		&i.UpdatedAt,
 		&i.QuoteToken,
 		&i.FilledQty,
+		&i.Makersigner,
+		&i.Takersigner,
 	)
 	return i, err
 }
