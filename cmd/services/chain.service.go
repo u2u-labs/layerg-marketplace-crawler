@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -51,6 +52,7 @@ func (cs *ChainService) AddNewChain(ctx *gin.Context) {
 		response.ErrorResponseData(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
+	fmt.Println("New chain added to cache")
 
 	response.SuccessReponseData(ctx, http.StatusOK, c)
 

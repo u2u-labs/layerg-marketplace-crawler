@@ -28,7 +28,7 @@ LIMIT $2 OFFSET $3;
 SELECT COUNT(*) FROM erc_1155_collection_assets 
 WHERE owner = $1;
 
--- name: Add1155Asset :exec
+-- name: Add1155Asset :one
 INSERT INTO
     erc_1155_collection_assets (asset_id, chain_id, token_id, owner, balance, attributes)
 VALUES (
@@ -72,4 +72,13 @@ WHERE asset_id = $1
 AND token_id = $2
 AND owner = COALESCE($3, owner);
 
+
+-- name: Get1155AssetChain :one
+SELECT erc_1155_collection_assets.*, assets.*, chains.chain_id
+FROM erc_1155_collection_assets
+INNER JOIN assets ON assets.id = erc_1155_collection_assets.asset_id
+INNER JOIN chains ON chains.id = assets.chain_id
+WHERE
+    asset_id = $1
+  AND token_id = $2;
 

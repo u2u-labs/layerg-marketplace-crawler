@@ -159,6 +159,24 @@ CREATE TABLE IF NOT EXISTS "Order"
             ON UPDATE CASCADE ON DELETE RESTRICT
 );
 
+CREATE TABLE IF NOT EXISTS "Ownership"
+(
+    id             TEXT                                   NOT NULL PRIMARY KEY,
+    "userAddress"  TEXT                                   NOT NULL,
+    "nftId"        TEXT,
+    "collectionId" UUID                                   REFERENCES "Collection"
+                                                              ON UPDATE CASCADE
+                                                              ON DELETE SET NULL,
+    quantity       INTEGER      DEFAULT 0                 NOT NULL,
+    "createdAt"    TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "updatedAt"    TIMESTAMP(3),
+    "chainId"      INTEGER      DEFAULT 0                 NOT NULL,
+    FOREIGN KEY ("nftId", "collectionId")
+        REFERENCES "NFT"
+        ON UPDATE CASCADE
+        ON DELETE SET NULL
+);
+
 
 -- +goose StatementEnd
 

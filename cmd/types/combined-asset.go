@@ -1,6 +1,7 @@
 package types
 
 import (
+	"github.com/u2u-labs/layerg-crawler/cmd/utils"
 	db "github.com/u2u-labs/layerg-crawler/db/sqlc"
 )
 
@@ -18,6 +19,8 @@ type Erc721CollectionAssetExtended struct {
 	*db.Erc721CollectionAsset
 	TxHash            string `json:"txHash"`
 	CollectionAddress string `json:"collectionAddress"`
+	From              string `json:"from"`
+	To                string `json:"to"`
 }
 
 type FulfillOrderEvent struct {
@@ -33,4 +36,10 @@ type FulfillOrderEvent struct {
 	OrderIndex   int32   `json:"orderIndex"`
 	OrderSig     string  `json:"orderSig"`
 	FilledQty    int32   `json:"filledQty"`
+}
+
+type Erc1155TransferSingleEventExtended struct {
+	*utils.Erc1155TransferSingleEvent
+	TxHash  string `json:"txHash"`
+	AssetId string `json:"assetId"`
 }
