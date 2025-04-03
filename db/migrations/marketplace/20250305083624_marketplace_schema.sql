@@ -177,6 +177,63 @@ CREATE TABLE IF NOT EXISTS "Ownership"
         ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS "Activity"
+(
+    id             TEXT                                   NOT NULL PRIMARY KEY,
+    "from"         TEXT                                   NOT NULL,
+    "to"           TEXT                                   NOT NULL,
+    "collectionId" UUID                                   NOT NULL,
+    "nftId"        VARCHAR(255)                           NOT NULL,
+    "userAddress"  TEXT                                   NOT NULL,
+    type           TEXT                                   NOT NULL,
+    qty            INTEGER                                NOT NULL,
+    price          TEXT         DEFAULT '0'::TEXT,
+    "createdAt"    TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "User"
+(
+    id              UUID                                   NOT NULL PRIMARY KEY,
+    "uaId"          TEXT,
+    mode            TEXT,
+    email           TEXT,
+    avatar          TEXT,
+    username        TEXT,
+    signature       TEXT,
+    "signedMessage" TEXT,
+    signer          TEXT                                   NOT NULL,
+    "publicKey"     TEXT,
+    "signDate"      TIMESTAMP(3),
+    "acceptedTerms" BOOLEAN      DEFAULT FALSE             NOT NULL,
+    "createdAt"     TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "updatedAt"     TIMESTAMP(3)                           NOT NULL,
+    bio             TEXT,
+    "facebookLink"  TEXT,
+    "twitterLink"   TEXT,
+    "telegramLink"  TEXT,
+    "shortLink"     TEXT,
+    "discordLink"   TEXT,
+    "webURL"        TEXT,
+    "coverImage"    TEXT,
+    followers       INTEGER      DEFAULT 0,
+    following       INTEGER      DEFAULT 0,
+    "accountStatus" BOOLEAN      DEFAULT FALSE             NOT NULL,
+    "verifyEmail"   BOOLEAN      DEFAULT FALSE             NOT NULL,
+    "isActive"      BOOLEAN      DEFAULT TRUE              NOT NULL,
+    "metricPoint"   BIGINT       DEFAULT 0,
+    "metricDetail"  JSONB        DEFAULT '{
+      "Verified": 0,
+      "Followers": {
+        "key": "follower_lv0",
+        "point": 0,
+        "total": 0,
+        "value": 0
+      },
+      "CollectionMetric": 0,
+      "VolumeIndividual": 0
+    }'::JSONB,
+    type            TEXT
+);
 
 -- +goose StatementEnd
 

@@ -145,6 +145,19 @@ func (ns NullOrderStatus) Value() (driver.Value, error) {
 	return string(ns.OrderStatus), nil
 }
 
+type Activity struct {
+	ID           string         `json:"id"`
+	From         string         `json:"from"`
+	To           string         `json:"to"`
+	CollectionId uuid.UUID      `json:"collectionId"`
+	NftId        string         `json:"nftId"`
+	UserAddress  string         `json:"userAddress"`
+	Type         string         `json:"type"`
+	Qty          int32          `json:"qty"`
+	Price        sql.NullString `json:"price"`
+	CreatedAt    time.Time      `json:"createdAt"`
+}
+
 type AnalysisCollection struct {
 	ID           string    `json:"id"`
 	CollectionId uuid.UUID `json:"collectionId"`
@@ -383,4 +396,37 @@ type Ownership struct {
 	CreatedAt    time.Time      `json:"createdAt"`
 	UpdatedAt    sql.NullTime   `json:"updatedAt"`
 	ChainId      int32          `json:"chainId"`
+}
+
+type User struct {
+	ID            uuid.UUID             `json:"id"`
+	UaId          sql.NullString        `json:"uaId"`
+	Mode          sql.NullString        `json:"mode"`
+	Email         sql.NullString        `json:"email"`
+	Avatar        sql.NullString        `json:"avatar"`
+	Username      sql.NullString        `json:"username"`
+	Signature     sql.NullString        `json:"signature"`
+	SignedMessage sql.NullString        `json:"signedMessage"`
+	Signer        string                `json:"signer"`
+	PublicKey     sql.NullString        `json:"publicKey"`
+	SignDate      sql.NullTime          `json:"signDate"`
+	AcceptedTerms bool                  `json:"acceptedTerms"`
+	CreatedAt     time.Time             `json:"createdAt"`
+	UpdatedAt     time.Time             `json:"updatedAt"`
+	Bio           sql.NullString        `json:"bio"`
+	FacebookLink  sql.NullString        `json:"facebookLink"`
+	TwitterLink   sql.NullString        `json:"twitterLink"`
+	TelegramLink  sql.NullString        `json:"telegramLink"`
+	ShortLink     sql.NullString        `json:"shortLink"`
+	DiscordLink   sql.NullString        `json:"discordLink"`
+	WebURL        sql.NullString        `json:"webURL"`
+	CoverImage    sql.NullString        `json:"coverImage"`
+	Followers     sql.NullInt32         `json:"followers"`
+	Following     sql.NullInt32         `json:"following"`
+	AccountStatus bool                  `json:"accountStatus"`
+	VerifyEmail   bool                  `json:"verifyEmail"`
+	IsActive      bool                  `json:"isActive"`
+	MetricPoint   sql.NullInt64         `json:"metricPoint"`
+	MetricDetail  pqtype.NullRawMessage `json:"metricDetail"`
+	Type          sql.NullString        `json:"type"`
 }
