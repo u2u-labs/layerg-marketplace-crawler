@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -91,6 +92,17 @@ func startCrawler(cmd *cobra.Command, args []string) {
 		sugar.Errorw("Failed to parse EXCHANGE ABI", "err", err)
 	}
 
+	if err = db.DeletePendingChainsInCache(ctx, rdb); err != nil {
+		sugar.Errorw("ProcessNewChains failed to delete cached pending chains", "err", err)
+	} else {
+		sugar.Infow("Pruned cached pending chains")
+	}
+	if err = db.DeletePendingAssetsInCache(ctx, rdb); err != nil {
+		sugar.Errorw("ProcessNewChainAssets failed to delete cached pending assets", "err", err)
+	} else {
+		sugar.Infow("Pruned cached pending assets")
+	}
+
 	err = crawlSupportedChains(ctx, sugar, dbStore, rdb, true)
 	if err != nil {
 		sugar.Errorw("Error init supported chains", "err", err)
@@ -98,7 +110,7 @@ func startCrawler(cmd *cobra.Command, args []string) {
 	}
 
 	// start consumers
-	go erc721TransferEventHandler(ctx, dbStore, sugar, rdb)
+	go transferEventHandler(ctx, dbStore, sugar, rdb)
 	go fillOrderEventHandler(ctx, dbStore, sugar, rdb)
 
 	timer := time.NewTimer(config.RetriveAddedChainsAndAssetsInterval)
@@ -185,16 +197,6 @@ func crawlSupportedChains(ctx context.Context, sugar *zap.SugaredLogger, dbConn 
 	if err != nil {
 		return err
 	}
-	if err = db.DeletePendingChainsInCache(ctx, rdb); err != nil {
-		sugar.Errorw("ProcessNewChains failed to delete cached pending chains", "err", err)
-	} else {
-		sugar.Infow("Pruned cached pending chains")
-	}
-	if err = db.DeletePendingAssetsInCache(ctx, rdb); err != nil {
-		sugar.Errorw("ProcessNewChainAssets failed to delete cached pending assets", "err", err)
-	} else {
-		sugar.Infow("Pruned cached pending assets")
-	}
 
 	for _, c := range chains {
 		contractType[c.ID] = make(map[string]dbCon.Asset)
@@ -279,18 +281,16 @@ func ProcessCrawlingBackfillCollection(ctx context.Context, sugar *zap.SugaredLo
 	return nil
 }
 
-const erc721TransferEvent = "erc721_transfer"
-
-func erc721TransferEventHandler(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, rdb *redis.Client) {
+func transferEventHandler(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, rdb *redis.Client) {
 	logger.Info("Starting erc721 transfer event handler")
 
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Errorw("Recovered from panic in erc721TransferEventHandler", "error", r, "stacktrace", string(debug.Stack()))
+			logger.Errorw("Recovered from panic in transferEventHandler", "error", r, "stacktrace", string(debug.Stack()))
 		}
 	}()
 
-	ps := rdb.Subscribe(ctx, erc721TransferEvent)
+	ps := rdb.Subscribe(ctx, config.Erc721TransferEvent, config.Erc1155TransferEvent)
 	defer ps.Close()
 
 	ch := ps.Channel()
@@ -310,8 +310,17 @@ func erc721TransferEventHandler(ctx context.Context, dbStore *dbCon.DBManager, l
 			}
 
 			// Process the message
-			if err := processErc721Transfer(ctx, dbStore, logger, msg); err != nil {
-				logger.Errorw("Error processing ERC721 transfer", "error", err)
+			switch msg.Channel {
+			case config.Erc721TransferEvent:
+				if err := processErc721Transfer(ctx, dbStore, logger, msg); err != nil {
+					logger.Errorw("Failed to process erc721 transfer event", "error", err)
+				}
+			case config.Erc1155TransferEvent:
+				if err := processErc1155Transfer(ctx, dbStore, logger, msg); err != nil {
+					logger.Errorw("Failed to process erc1155 transfer event", "error", err)
+				}
+			default:
+				logger.Warnw("Received unexpected message channel", "channel", msg.Channel)
 			}
 		}
 	}
@@ -380,13 +389,43 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		Source:         sql.NullString{Valid: true, String: "crawler"},
 		OwnerId:        payload.Owner,
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to upsert NFT: %w", err)
 	}
 
+	// check zero address
+	if payload.From != common.HexToAddress("0x0000000000000000000000000000000000000000").String() {
+		// delete ownership
+		err = dbStore.MpQueries.DeleteOwnership(ctx, dbCon.DeleteOwnershipParams{
+			UserAddress: strings.ToLower(payload.From),
+			NftId: sql.NullString{
+				String: payload.TokenID,
+				Valid:  true,
+			},
+			CollectionId: uuid.NullUUID{Valid: true, UUID: col.ID},
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// update ownership
+	_, err = dbStore.MpQueries.UpsertOwnership(ctx, dbCon.UpsertOwnershipParams{
+		ID:           uuid.New().String(),
+		UserAddress:  strings.ToLower(payload.Owner),
+		NftId:        sql.NullString{Valid: true, String: payload.TokenID},
+		CollectionId: uuid.NullUUID{Valid: true, UUID: col.ID},
+		Quantity:     1, // 721 only has 1
+		CreatedAt:    time.Now(),
+		UpdatedAt:    sql.NullTime{Valid: true, Time: time.Now()},
+		ChainId:      payload.ChainID,
+	})
+	if err != nil {
+		return err
+	}
+
 	logger.Infow("Upserted NFT successfully", "tokenID", payload.TokenID, "collection", upsertedNft.CollectionId,
-		"chainId", payload.ChainID)
+		"chainId", payload.ChainID, "type", "721")
 	return nil
 }
 
@@ -541,34 +580,6 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	//n := time.Now()
-	// format ts as YYYYMMDD_HH
-	//formattedDate := n.Format("20060102_150405")
-	//id := fmt.Sprintf("%s_%s", strings.ToLower(collection.Address.String), formattedDate)
-	//id, err := uuid.NewV7()
-	//if err != nil {
-	//	return fmt.Errorf("failed to generate id: %w", err)
-	//}
-	//err = q.UpsertAnalysisCollection(ctx, dbCon.UpsertAnalysisCollectionParams{
-	//	ID:           id.String(),
-	//	CollectionId: collection.ID,
-	//	KeyTime:      formattedDate,
-	//	Address:      collection.Address.String,
-	//	Type:         collection.Type,
-	//	Volume:       collection.VolumeWei,
-	//	Vol:          collection.Vol,
-	//	VolumeWei:    collection.VolumeWei,
-	//	FloorPrice:   collection.FloorPrice,
-	//	Floor:        collection.Floor,
-	//	FloorWei:     collection.FloorWei,
-	//	Items:        totalItems,  // total nfts
-	//	Owner:        totalOwners, // total owners
-	//	CreatedAt:    time.Now(),
-	//})
-	//if err != nil {
-	//	return fmt.Errorf("failed to upsert collection: %w", err)
-	//}
-
 	// send to sqs
 	orderPayload := types.FulfillOrderEvent{
 		OrderIndex:   order.Index,
@@ -603,5 +614,171 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 
 func processCancelOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) error {
 	// do nothing for now
+	return nil
+}
+
+func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) error {
+	var payload types.Erc1155TransferSingleEventExtended
+	if err := json.Unmarshal([]byte(msg.Payload), &payload); err != nil {
+		return fmt.Errorf("failed to unmarshal: %w", err)
+	}
+
+	asset, err := dbStore.CrQueries.Get1155AssetChain(ctx, dbCon.Get1155AssetChainParams{
+		AssetID: payload.AssetId,
+		TokenID: payload.Id.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get asset: %w", err)
+	}
+
+	var (
+		name         = payload.Id.String()
+		ipfsUrl      = ""
+		description  = ""
+		image        = ""
+		animationUrl = ""
+	)
+
+	if asset.Attributes.Valid && len(asset.Attributes.String) > 0 {
+		var attrs map[string]string
+		// try to unmarshal attributes to a map
+		if err := json.Unmarshal([]byte(asset.Attributes.String), &attrs); err == nil {
+			name = attrs["name"]
+			ipfsUrl = attrs["image"]
+			description = attrs["description"]
+			image = attrs["image"]
+			animationUrl = attrs["animationUrl"]
+		}
+	}
+
+	// get collection
+	col, err := dbStore.MpQueries.GetCollectionByAddressAndChainId(ctx, dbCon.GetCollectionByAddressAndChainIdParams{
+		Address: sql.NullString{String: strings.ToLower(asset.CollectionAddress), Valid: true},
+		ChainId: asset.ChainID_3,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	slugId, err := gonanoid.New(8)
+	if err != nil {
+		return err
+	}
+	// name = symbol#unix timestamp
+	// slug = symbol-shortid
+	// upsert nft to layerg marketplace db
+	upsertedNft, err := dbStore.MpQueries.UpsertNFT(ctx, dbCon.UpsertNFTParams{
+		ID:             asset.TokenID,
+		Name:           fmt.Sprintf("%s#%s", col.Symbol, asset.TokenID),
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+		Status:         "SUCCESS",
+		TokenUri:       ipfsUrl,
+		TxCreationHash: payload.TxHash,
+		CreatorId:      uuid.NullUUID{},
+		CollectionId:   col.ID,
+		Image:          sql.NullString{Valid: true, String: image},
+		Description:    sql.NullString{Valid: true, String: description},
+		AnimationUrl:   sql.NullString{Valid: true, String: animationUrl},
+		NameSlug:       sql.NullString{Valid: true, String: name},
+		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", col.Symbol, slugId)},
+		Source:         sql.NullString{Valid: true, String: "crawler"},
+		OwnerId:        asset.Owner,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upsert NFT: %w", err)
+	}
+
+	tx, err := dbStore.MarketplaceDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	q := dbStore.MpQueries.WithTx(tx)
+
+	fromBalance, err1 := q.GetOwnershipByUserAddressAndCollectionId(ctx, dbCon.GetOwnershipByUserAddressAndCollectionIdParams{
+		UserAddress:  strings.ToLower(payload.From.String()),
+		CollectionId: uuid.NullUUID{Valid: true, UUID: col.ID},
+		NftId:        sql.NullString{Valid: true, String: asset.TokenID},
+	})
+	if errors.Is(err1, sql.ErrNoRows) {
+		// do nothing
+	} else if err1 != nil {
+		return err1
+	}
+
+	toBalance, err2 := q.GetOwnershipByUserAddressAndCollectionId(ctx, dbCon.GetOwnershipByUserAddressAndCollectionIdParams{
+		UserAddress:  strings.ToLower(payload.From.String()),
+		CollectionId: uuid.NullUUID{Valid: true, UUID: col.ID},
+		NftId:        sql.NullString{Valid: true, String: asset.TokenID},
+	})
+	if errors.Is(err2, sql.ErrNoRows) {
+		// upsert ownership balance
+		_, err2 = q.UpsertOwnership(ctx, dbCon.UpsertOwnershipParams{
+			ID:           uuid.New().String(),
+			UserAddress:  strings.ToLower(payload.To.String()),
+			NftId:        sql.NullString{Valid: true, String: asset.TokenID},
+			CollectionId: uuid.NullUUID{Valid: true, UUID: col.ID},
+			Quantity:     int32(payload.Value.Int64()),
+			CreatedAt:    time.Now(),
+			UpdatedAt:    sql.NullTime{Valid: true, Time: time.Now()},
+			ChainId:      int32(asset.ChainID_3),
+		})
+		if err2 != nil {
+			return err2
+		}
+	} else if err2 != nil {
+		return err2
+	}
+
+	if !errors.Is(err1, sql.ErrNoRows) && !errors.Is(err2, sql.ErrNoRows) {
+		newFrom, err := q.UpsertOwnership(ctx, dbCon.UpsertOwnershipParams{
+			ID:           uuid.New().String(),
+			UserAddress:  strings.ToLower(payload.From.String()),
+			NftId:        sql.NullString{Valid: true, String: asset.TokenID},
+			CollectionId: uuid.NullUUID{Valid: true, UUID: col.ID},
+			Quantity:     fromBalance.Quantity - int32(payload.Value.Int64()),
+			CreatedAt:    time.Now(),
+			UpdatedAt:    sql.NullTime{Valid: true, Time: time.Now()},
+			ChainId:      int32(asset.ChainID_3),
+		})
+		if err != nil {
+			return err
+		}
+		_, err = q.UpsertOwnership(ctx, dbCon.UpsertOwnershipParams{
+			ID:           uuid.New().String(),
+			UserAddress:  strings.ToLower(payload.To.String()),
+			NftId:        sql.NullString{Valid: true, String: asset.TokenID},
+			CollectionId: uuid.NullUUID{Valid: true, UUID: col.ID},
+			Quantity:     toBalance.Quantity + int32(payload.Value.Int64()),
+			CreatedAt:    time.Now(),
+			UpdatedAt:    sql.NullTime{Valid: true, Time: time.Now()},
+			ChainId:      int32(asset.ChainID_3),
+		})
+		if err != nil {
+			return err
+		}
+		// delete ownership if quantity is 0
+		if newFrom.Quantity <= 0 {
+			err = q.DeleteOwnership(ctx, dbCon.DeleteOwnershipParams{
+				UserAddress:  fromBalance.UserAddress,
+				NftId:        sql.NullString{Valid: true, String: asset.TokenID},
+				CollectionId: uuid.NullUUID{Valid: true, UUID: col.ID},
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	logger.Infow("Upserted NFT successfully", "tokenID", asset.TokenID, "collection", upsertedNft.CollectionId,
+		"chainId", asset.ChainID_3, "type", "1155")
 	return nil
 }

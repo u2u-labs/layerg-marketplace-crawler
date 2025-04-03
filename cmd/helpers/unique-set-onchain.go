@@ -50,17 +50,23 @@ func (a *AddressSet) Reset() {
 // TokenIdSet holds unique token IDs using a map of values
 type TokenIdSet struct {
 	tokenIds map[string]struct{}
+	txHashes map[string]string
+	from     map[string]string
+	to       map[string]string
 }
 
 // NewTokenIdSet initializes a new TokenIdSet
 func NewTokenIdSet() *TokenIdSet {
 	return &TokenIdSet{
 		tokenIds: make(map[string]struct{}),
+		txHashes: make(map[string]string),
+		from:     make(map[string]string),
+		to:       make(map[string]string),
 	}
 }
 
 // AddTokenId adds a new token ID to the set if it doesn't already exist
-func (t *TokenIdSet) AddTokenId(tokenId *big.Int) {
+func (t *TokenIdSet) AddTokenId(tokenId *big.Int, txHash, from, to string) {
 	if tokenId == nil {
 		return
 	}
@@ -72,6 +78,21 @@ func (t *TokenIdSet) AddTokenId(tokenId *big.Int) {
 		return
 	}
 	t.tokenIds[tokenStr] = struct{}{} // Use an empty struct for memory efficiency
+	t.txHashes[tokenStr] = txHash
+	t.from[tokenStr] = from
+	t.to[tokenStr] = to
+}
+
+func (t *TokenIdSet) GetTxHash(tokenId string) string {
+	return t.txHashes[tokenId]
+}
+
+func (t *TokenIdSet) GetFrom(tokenId string) string {
+	return t.from[tokenId]
+}
+
+func (t *TokenIdSet) GetTo(tokenId string) string {
+	return t.to[tokenId]
 }
 
 // GetTokenIds returns the list of unique token IDs
@@ -88,6 +109,9 @@ func (t *TokenIdSet) GetTokenIds() []*big.Int {
 // Reset clears all token IDs in the TokenIdSet
 func (t *TokenIdSet) Reset() {
 	t.tokenIds = make(map[string]struct{}) // Reinitialize the map
+	t.txHashes = make(map[string]string)   // Reinitialize the map
+	t.from = make(map[string]string)
+	t.to = make(map[string]string)
 }
 
 // ///

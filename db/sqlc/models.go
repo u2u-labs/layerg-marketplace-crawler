@@ -373,3 +373,14 @@ type OrderAsset struct {
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
 }
+
+type Ownership struct {
+	ID           string         `json:"id"`
+	UserAddress  string         `json:"userAddress"`
+	NftId        sql.NullString `json:"nftId"`
+	CollectionId uuid.NullUUID  `json:"collectionId"`
+	Quantity     int32          `json:"quantity"`
+	CreatedAt    time.Time      `json:"createdAt"`
+	UpdatedAt    sql.NullTime   `json:"updatedAt"`
+	ChainId      int32          `json:"chainId"`
+}

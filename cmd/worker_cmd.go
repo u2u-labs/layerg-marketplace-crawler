@@ -345,7 +345,7 @@ func (p *BackfillProcessor) ProcessTask(ctx context.Context, t *asynq.Task) erro
 			toScanBlock = int64(scannedBlock)
 		}
 	case dbCon.AssetTypeERC1155:
-		scannedBlock, _ := handleErc1155Backfill(ctx, p.sugar, q, p.ethClient, p.chain, logs)
+		scannedBlock, _ := handleErc1155Backfill(ctx, p.sugar, q, p.rdb, p.ethClient, p.chain, logs)
 		if scannedBlock > 0 {
 			toScanBlock = int64(scannedBlock)
 		}
