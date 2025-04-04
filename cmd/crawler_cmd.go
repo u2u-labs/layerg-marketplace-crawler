@@ -700,7 +700,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 	// get collection
 	col, err := dbStore.MpQueries.GetCollectionByAddressAndChainId(ctx, dbCon.GetCollectionByAddressAndChainIdParams{
 		Address: sql.NullString{String: strings.ToLower(asset.CollectionAddress), Valid: true},
-		ChainId: asset.ChainID_3,
+		ChainId: asset.ChainID_2,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
@@ -788,7 +788,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 			Quantity:     int32(payload.Value.Int64()),
 			CreatedAt:    time.Now(),
 			UpdatedAt:    sql.NullTime{Valid: true, Time: time.Now()},
-			ChainId:      int32(asset.ChainID_3),
+			ChainId:      int32(asset.ChainID_2),
 		})
 		if err2 != nil {
 			return err2
@@ -806,7 +806,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 			Quantity:     fromBalance.Quantity - int32(payload.Value.Int64()),
 			CreatedAt:    time.Now(),
 			UpdatedAt:    sql.NullTime{Valid: true, Time: time.Now()},
-			ChainId:      int32(asset.ChainID_3),
+			ChainId:      int32(asset.ChainID_2),
 		})
 		if err != nil {
 			return err
@@ -819,7 +819,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 			Quantity:     toBalance.Quantity + int32(payload.Value.Int64()),
 			CreatedAt:    time.Now(),
 			UpdatedAt:    sql.NullTime{Valid: true, Time: time.Now()},
-			ChainId:      int32(asset.ChainID_3),
+			ChainId:      int32(asset.ChainID_2),
 		})
 		if err != nil {
 			return err
@@ -842,6 +842,6 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 	}
 
 	logger.Infow("Upserted NFT successfully", "tokenID", asset.TokenID, "collection", upsertedNft.CollectionId,
-		"chainId", asset.ChainID_3, "type", "1155")
+		"chainId", asset.ChainID_2, "type", "1155")
 	return nil
 }

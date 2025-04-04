@@ -74,7 +74,7 @@ AND owner = COALESCE($3, owner);
 
 
 -- name: Get1155AssetChain :one
-SELECT erc_1155_collection_assets.*, assets.*, chains.chain_id
+SELECT erc_1155_collection_assets.*, assets.collection_address, chains.chain_id
 FROM erc_1155_collection_assets
 INNER JOIN assets ON assets.id = erc_1155_collection_assets.asset_id
 INNER JOIN chains ON chains.id = assets.chain_id
