@@ -1141,7 +1141,7 @@ func getErc721TokenURI(ctx context.Context, sugar *zap.SugaredLogger, client *et
 func getErc1155TokenURI(ctx context.Context, sugar *zap.SugaredLogger, client *ethclient.Client, rc *redis.Client,
 	chainName string, contractAddress *common.Address, tokenId *big.Int) (string, error) {
 	hashKey := fmt.Sprintf("erc1155_token_uri:%s", chainName)
-	field := contractAddress.Hex()
+	field := fmt.Sprintf("%s:%s", contractAddress.Hex(), tokenId.String())
 
 	// Try to get from cache first
 	rs, err := rc.HGet(ctx, hashKey, field).Result()
