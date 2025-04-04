@@ -156,7 +156,7 @@ func (q *Queries) Get1155AssetByAssetIdAndTokenId(ctx context.Context, arg Get11
 }
 
 const get1155AssetChain = `-- name: Get1155AssetChain :one
-SELECT erc_1155_collection_assets.id, erc_1155_collection_assets.chain_id, erc_1155_collection_assets.asset_id, erc_1155_collection_assets.token_id, erc_1155_collection_assets.owner, erc_1155_collection_assets.balance, erc_1155_collection_assets.attributes, erc_1155_collection_assets.created_at, erc_1155_collection_assets.updated_at, assets.id, assets.chain_id, assets.collection_address, assets.type, assets.created_at, assets.updated_at, assets.decimal_data, assets.initial_block, assets.last_updated, chains.chain_id
+SELECT erc_1155_collection_assets.id, erc_1155_collection_assets.chain_id, erc_1155_collection_assets.asset_id, erc_1155_collection_assets.token_id, erc_1155_collection_assets.owner, erc_1155_collection_assets.balance, erc_1155_collection_assets.attributes, erc_1155_collection_assets.created_at, erc_1155_collection_assets.updated_at, assets.collection_address, chains.chain_id
 FROM erc_1155_collection_assets
 INNER JOIN assets ON assets.id = erc_1155_collection_assets.asset_id
 INNER JOIN chains ON chains.id = assets.chain_id
@@ -180,16 +180,8 @@ type Get1155AssetChainRow struct {
 	Attributes        sql.NullString `json:"attributes"`
 	CreatedAt         time.Time      `json:"createdAt"`
 	UpdatedAt         time.Time      `json:"updatedAt"`
-	ID_2              string         `json:"id2"`
-	ChainID_2         int32          `json:"chainId2"`
 	CollectionAddress string         `json:"collectionAddress"`
-	Type              AssetType      `json:"type"`
-	CreatedAt_2       time.Time      `json:"createdAt2"`
-	UpdatedAt_2       time.Time      `json:"updatedAt2"`
-	DecimalData       sql.NullInt16  `json:"decimalData"`
-	InitialBlock      sql.NullInt64  `json:"initialBlock"`
-	LastUpdated       sql.NullTime   `json:"lastUpdated"`
-	ChainID_3         int64          `json:"chainId3"`
+	ChainID_2         int64          `json:"chainId2"`
 }
 
 func (q *Queries) Get1155AssetChain(ctx context.Context, arg Get1155AssetChainParams) (Get1155AssetChainRow, error) {
@@ -205,16 +197,8 @@ func (q *Queries) Get1155AssetChain(ctx context.Context, arg Get1155AssetChainPa
 		&i.Attributes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.ID_2,
-		&i.ChainID_2,
 		&i.CollectionAddress,
-		&i.Type,
-		&i.CreatedAt_2,
-		&i.UpdatedAt_2,
-		&i.DecimalData,
-		&i.InitialBlock,
-		&i.LastUpdated,
-		&i.ChainID_3,
+		&i.ChainID_2,
 	)
 	return i, err
 }
