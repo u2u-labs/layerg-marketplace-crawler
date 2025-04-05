@@ -188,7 +188,8 @@ CREATE TABLE IF NOT EXISTS "Activity"
     type           TEXT                                   NOT NULL,
     qty            INTEGER                                NOT NULL,
     price          TEXT         DEFAULT '0'::TEXT,
-    "createdAt"    TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP NOT NULL
+    "createdAt"    TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "logId"          TEXT
 );
 
 CREATE TABLE IF NOT EXISTS "User"

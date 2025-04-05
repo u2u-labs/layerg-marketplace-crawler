@@ -15,7 +15,7 @@ INSERT INTO
     onchain_histories("from","to",asset_id,token_id,amount,tx_hash,timestamp)
 VALUES (
     $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, "from", "to", asset_id, token_id, tx_hash, timestamp, created_at, updated_at, amount
+) ON CONFLICT DO NOTHING RETURNING id, "from", "to", asset_id, token_id, tx_hash, timestamp, created_at, updated_at, amount
 `
 
 type AddOnchainTransactionParams struct {
