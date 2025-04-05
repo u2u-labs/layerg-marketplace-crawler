@@ -80,6 +80,10 @@ func AddBackfillCrawlerTask(ctx context.Context, sugar *zap.SugaredLogger, clien
 			if bf.CurrentBlock < newBf.CurrentBlock {
 				bf.CurrentBlock = newBf.CurrentBlock
 			}
+			if newBf.Status == db.CrawlerStatusCRAWLED {
+				sugar.Info("Stopping backfill because crawler caught up to the latest block", "chain", chain, "block", bf.CurrentBlock)
+				return
+			}
 
 			task, err := NewBackfillCollectionTask(bf)
 			if err != nil {
@@ -142,7 +146,7 @@ func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *
 		}
 
 		if err = FilterEvents(ctx, sugar, qtx, client.EthClient, chain, rdb, receipts, block.Time()); err != nil {
-			sugar.Errorw("Failed to filter events", "err", err, "height", i, "chain", chain)
+			sugar.Errorw("Failed to filter events", "err", err, "height", i, "chain", chain.ChainID)
 			break
 		}
 		latestUpdatedBlock = i
@@ -247,7 +251,7 @@ func handleErc20Transfer(ctx context.Context, sugar *zap.SugaredLogger, q *db.Qu
 		Timestamp: time.Now(),
 	})
 
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
@@ -322,6 +326,10 @@ func handleErc20BackFill(ctx context.Context, sugar *zap.SugaredLogger, q *db.Qu
 			TxHash:    l.TxHash.Hex(),
 			Timestamp: time.Now(),
 		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			sugar.Errorw("Failed to add onchain transaction", "err", err)
+			continue
+		}
 
 		// adding sender and receiver to the address set
 		addressSet.AddAddress(event.From)
@@ -413,12 +421,12 @@ func handleErc721BackFill(ctx context.Context, sugar *zap.SugaredLogger, q *db.Q
 			TxHash:    l.TxHash.Hex(),
 			Timestamp: time.Now(),
 		})
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return 0, err
 		}
 
 		// adding token Id
-		tokenIdSet.AddTokenId(event.TokenID, l.TxHash.String(), event.From.String(), event.To.String())
+		tokenIdSet.AddTokenId(event.TokenID, l.TxHash.String(), event.From.String(), event.To.String(), l.Index)
 		if i > config.MaxScanLogsLimit {
 			sugar.Infow("Batch size is too big, split the batch", "total", len(logs), "batch", i)
 			scannedBlock = l.BlockNumber
@@ -520,7 +528,7 @@ func fetchTokenUriAndOwner(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 				Valid:  true,
 			},
 		})
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 
@@ -531,6 +539,7 @@ func fetchTokenUriAndOwner(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 			CollectionAddress:     contractAddress.Hex(),
 			From:                  tokenIdSet.GetFrom(asset.TokenID),
 			To:                    tokenIdSet.GetTo(asset.TokenID),
+			LogIndex:              tokenIdSet.GetLogIndex(asset.TokenID),
 		}
 		dataBytes, err := json.Marshal(data)
 		if err != nil {
@@ -585,7 +594,7 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 				TxHash:    l.TxHash.Hex(),
 				Timestamp: time.Now(),
 			})
-			if err != nil {
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return 0, err
 			}
 
@@ -596,6 +605,7 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 				Erc1155TransferSingleEvent: &event,
 				TxHash:                     l.TxHash.String(),
 				AssetId:                    contractType[chain.ID][l.Address.Hex()].ID,
+				LogIndex:                   l.Index,
 			})
 		}
 
@@ -622,7 +632,7 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 					TxHash:    l.TxHash.Hex(),
 					Timestamp: time.Now(),
 				})
-				if err != nil {
+				if err != nil && !errors.Is(err, sql.ErrNoRows) {
 					return 0, err
 				}
 
@@ -637,8 +647,9 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 						Id:       event.Ids[i],
 						Value:    event.Values[i],
 					},
-					TxHash:  l.TxHash.String(),
-					AssetId: contractType[chain.ID][l.Address.Hex()].ID,
+					TxHash:   l.TxHash.String(),
+					AssetId:  contractType[chain.ID][l.Address.Hex()].ID,
+					LogIndex: l.Index,
 				})
 			}
 		}
@@ -772,12 +783,12 @@ func handleErc721Transfer(ctx context.Context, sugar *zap.SugaredLogger, q *db.Q
 		TxHash:    l.TxHash.Hex(),
 		Timestamp: time.Now(),
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
 	tokenIdSet := helpers.NewTokenIdSet()
-	tokenIdSet.AddTokenId(event.TokenID, l.TxHash.String(), event.From.String(), event.To.String())
+	tokenIdSet.AddTokenId(event.TokenID, l.TxHash.String(), event.From.String(), event.To.String(), l.Index)
 	rpcClient, err := helpers.InitNewRPCClient(chain.RpcUrl)
 	if err != nil {
 		return err
@@ -809,7 +820,7 @@ func handleErc721Transfer(ctx context.Context, sugar *zap.SugaredLogger, q *db.Q
 			Valid:  true,
 		},
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
@@ -837,7 +848,7 @@ func addingErc721Elem(ctx context.Context, sugar *zap.SugaredLogger, q *db.Queri
 		TxHash:    l.TxHash.Hex(),
 		Timestamp: time.Now(),
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
@@ -870,7 +881,7 @@ func addingErc721Elem(ctx context.Context, sugar *zap.SugaredLogger, q *db.Queri
 			Valid:  true,
 		},
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
@@ -902,7 +913,7 @@ func handleErc1155TransferBatch(ctx context.Context, sugar *zap.SugaredLogger, q
 			TxHash:    l.TxHash.Hex(),
 			Timestamp: time.Now(),
 		})
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 
@@ -929,7 +940,7 @@ func handleErc1155TransferBatch(ctx context.Context, sugar *zap.SugaredLogger, q
 				String: uri,
 				Valid:  true,
 			},
-		}); err != nil {
+		}); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 
@@ -950,34 +961,33 @@ func handleErc1155TransferBatch(ctx context.Context, sugar *zap.SugaredLogger, q
 				String: uri,
 				Valid:  true,
 			},
-		}); err != nil {
+		}); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 
-		go func() {
-			// publish to redis
-			data := types.Erc1155TransferSingleEventExtended{
-				Erc1155TransferSingleEvent: &utils.Erc1155TransferSingleEvent{
-					Operator: event.Operator,
-					From:     event.From,
-					To:       event.To,
-					Id:       event.Ids[i],
-					Value:    event.Values[i],
-				},
-				TxHash:  l.TxHash.String(),
-				AssetId: contractType[chain.ID][l.Address.Hex()].ID,
-			}
-			dataBytes, err := json.Marshal(data)
-			if err != nil {
-				sugar.Errorw("Failed to marshal data", "err", err)
-				return
-			}
-			err = rc.Publish(ctx, config.Erc1155TransferEvent, dataBytes).Err()
-			if err != nil {
-				sugar.Errorw("Failed to publish to redis", "err", err)
-				return
-			}
-		}()
+		// publish to redis
+		data := types.Erc1155TransferSingleEventExtended{
+			Erc1155TransferSingleEvent: &utils.Erc1155TransferSingleEvent{
+				Operator: event.Operator,
+				From:     event.From,
+				To:       event.To,
+				Id:       event.Ids[i],
+				Value:    event.Values[i],
+			},
+			TxHash:   l.TxHash.String(),
+			AssetId:  contractType[chain.ID][l.Address.Hex()].ID,
+			LogIndex: l.Index,
+		}
+		dataBytes, err := json.Marshal(data)
+		if err != nil {
+			sugar.Errorw("Failed to marshal data", "err", err)
+			continue
+		}
+		err = rc.Publish(ctx, config.Erc1155TransferEvent, dataBytes).Err()
+		if err != nil {
+			sugar.Errorw("Failed to publish to redis", "err", err)
+			continue
+		}
 	}
 
 	return nil
@@ -1008,7 +1018,7 @@ func handleErc1155TransferSingle(ctx context.Context, sugar *zap.SugaredLogger, 
 		TxHash:    l.TxHash.Hex(),
 		Timestamp: time.Now(),
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
@@ -1066,6 +1076,7 @@ func handleErc1155TransferSingle(ctx context.Context, sugar *zap.SugaredLogger, 
 			Erc1155TransferSingleEvent: &event,
 			TxHash:                     l.TxHash.String(),
 			AssetId:                    contractType[chain.ID][l.Address.Hex()].ID,
+			LogIndex:                   l.Index,
 		}
 		dataBytes, err := json.Marshal(data)
 		if err != nil {
