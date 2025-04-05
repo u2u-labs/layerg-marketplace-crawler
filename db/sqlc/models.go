@@ -156,6 +156,7 @@ type Activity struct {
 	Qty          int32          `json:"qty"`
 	Price        sql.NullString `json:"price"`
 	CreatedAt    time.Time      `json:"createdAt"`
+	LogId        sql.NullString `json:"logId"`
 }
 
 type AnalysisCollection struct {

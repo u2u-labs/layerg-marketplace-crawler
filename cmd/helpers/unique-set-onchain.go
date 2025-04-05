@@ -53,6 +53,7 @@ type TokenIdSet struct {
 	txHashes map[string]string
 	from     map[string]string
 	to       map[string]string
+	logIndex map[string]uint
 }
 
 // NewTokenIdSet initializes a new TokenIdSet
@@ -62,11 +63,12 @@ func NewTokenIdSet() *TokenIdSet {
 		txHashes: make(map[string]string),
 		from:     make(map[string]string),
 		to:       make(map[string]string),
+		logIndex: make(map[string]uint),
 	}
 }
 
 // AddTokenId adds a new token ID to the set if it doesn't already exist
-func (t *TokenIdSet) AddTokenId(tokenId *big.Int, txHash, from, to string) {
+func (t *TokenIdSet) AddTokenId(tokenId *big.Int, txHash, from, to string, logIndex uint) {
 	if tokenId == nil {
 		return
 	}
@@ -81,6 +83,7 @@ func (t *TokenIdSet) AddTokenId(tokenId *big.Int, txHash, from, to string) {
 	t.txHashes[tokenStr] = txHash
 	t.from[tokenStr] = from
 	t.to[tokenStr] = to
+	t.logIndex[tokenStr] = logIndex
 }
 
 func (t *TokenIdSet) GetTxHash(tokenId string) string {
@@ -93,6 +96,10 @@ func (t *TokenIdSet) GetFrom(tokenId string) string {
 
 func (t *TokenIdSet) GetTo(tokenId string) string {
 	return t.to[tokenId]
+}
+
+func (t *TokenIdSet) GetLogIndex(tokenId string) uint {
+	return t.logIndex[tokenId]
 }
 
 // GetTokenIds returns the list of unique token IDs

@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -396,7 +398,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		Source:         sql.NullString{Valid: true, String: "crawler"},
 		OwnerId:        payload.Owner,
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("failed to upsert NFT: %w", err)
 	}
 
@@ -412,8 +414,12 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		Qty:          1,
 		Price:        sql.NullString{Valid: true, String: "0"},
 		CreatedAt:    time.Now(),
+		LogId: sql.NullString{
+			String: generateUniqueLogId(payload.TxHash, col.ID.String(), payload.TokenID, payload.From, payload.To, payload.LogIndex),
+			Valid:  true,
+		},
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		logger.Errorw("failed to upsert activity", "error", err)
 	}
 
@@ -616,8 +622,12 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 		Qty:          order.FilledQty,
 		Price:        sql.NullString{Valid: true, String: order.Price},
 		CreatedAt:    time.Now(),
+		LogId: sql.NullString{
+			String: generateUniqueLogId(payload.TxHash, collection.ID.String(), order.TakeAssetId, payload.Maker, payload.Taker.String, 0),
+			Valid:  true,
+		},
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
@@ -661,6 +671,12 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 func processCancelOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) error {
 	// do nothing for now
 	return nil
+}
+
+func generateUniqueLogId(txHash, collectionID, nftID, from, to string, logIndex uint) string {
+	data := fmt.Sprintf("%s-%d-%s-%s-%s-%s", txHash, logIndex, collectionID, nftID, from, to)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])
 }
 
 func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) error {
@@ -734,7 +750,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 		Source:         sql.NullString{Valid: true, String: "crawler"},
 		OwnerId:        asset.Owner,
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("failed to upsert NFT: %w", err)
 	}
 
@@ -750,8 +766,12 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 		Qty:          int32(payload.Value.Int64()),
 		Price:        sql.NullString{Valid: true, String: "0"},
 		CreatedAt:    time.Now(),
+		LogId: sql.NullString{
+			Valid:  true,
+			String: generateUniqueLogId(payload.TxHash, col.ID.String(), asset.TokenID, payload.From.String(), payload.To.String(), payload.LogIndex),
+		},
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		logger.Errorw("failed to upsert activity", "error", err)
 	}
 

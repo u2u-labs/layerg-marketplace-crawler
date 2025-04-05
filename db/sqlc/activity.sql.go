@@ -15,9 +15,9 @@ import (
 
 const upsertActivity = `-- name: UpsertActivity :exec
 INSERT INTO "Activity"
-    ("id", "from", "to", "collectionId", "nftId", "userAddress", "type", "qty", "price", "createdAt")
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-ON CONFLICT ("id") DO NOTHING
+    ("id", "from", "to", "collectionId", "nftId", "userAddress", "type", "qty", "price", "createdAt", "logId")
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+ON CONFLICT ("logId") DO NOTHING
 `
 
 type UpsertActivityParams struct {
@@ -31,6 +31,7 @@ type UpsertActivityParams struct {
 	Qty          int32          `json:"qty"`
 	Price        sql.NullString `json:"price"`
 	CreatedAt    time.Time      `json:"createdAt"`
+	LogId        sql.NullString `json:"logId"`
 }
 
 func (q *Queries) UpsertActivity(ctx context.Context, arg UpsertActivityParams) error {
@@ -45,6 +46,7 @@ func (q *Queries) UpsertActivity(ctx context.Context, arg UpsertActivityParams) 
 		arg.Qty,
 		arg.Price,
 		arg.CreatedAt,
+		arg.LogId,
 	)
 	return err
 }
