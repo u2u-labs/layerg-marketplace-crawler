@@ -418,6 +418,8 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 			String: generateUniqueLogId(payload.TxHash, col.ID.String(), payload.TokenID, payload.From, payload.To, payload.LogIndex),
 			Valid:  true,
 		},
+		BlockNumber: sql.NullString{Valid: true, String: payload.BlockNumber},
+		TxHash:      sql.NullString{Valid: true, String: payload.TxHash},
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		logger.Errorw("failed to upsert activity", "error", err)
@@ -537,7 +539,7 @@ func processExchangeMessage(ctx context.Context, dbStore *dbCon.DBManager, logge
 }
 
 func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) error {
-	var payload dbCon.OrderAsset
+	var payload types.OrderEventExtended
 	if err := json.Unmarshal([]byte(msg.Payload), &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal: %w", err)
 	}
@@ -627,6 +629,8 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 			String: generateUniqueLogId(payload.TxHash, collection.ID.String(), order.TakeAssetId, payload.Maker, payload.Taker.String, 0),
 			Valid:  true,
 		},
+		BlockNumber: sql.NullString{Valid: true, String: payload.BlockNumber},
+		TxHash:      sql.NullString{Valid: true, String: payload.TxHash},
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -670,7 +674,7 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 }
 
 func processCancelOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) error {
-	var payload dbCon.OrderAsset
+	var payload types.OrderEventExtended
 	if err := json.Unmarshal([]byte(msg.Payload), &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal: %w", err)
 	}
@@ -720,6 +724,8 @@ func processCancelOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logg
 			String: generateUniqueLogId(payload.TxHash, collection.ID.String(), order.TakeAssetId, payload.Maker, payload.Taker.String, 0),
 			Valid:  true,
 		},
+		BlockNumber: sql.NullString{Valid: true, String: payload.BlockNumber},
+		TxHash:      sql.NullString{Valid: true, String: payload.TxHash},
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -830,6 +836,8 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 			Valid:  true,
 			String: generateUniqueLogId(payload.TxHash, col.ID.String(), asset.TokenID, payload.From.String(), payload.To.String(), payload.LogIndex),
 		},
+		BlockNumber: sql.NullString{Valid: true, String: payload.BlockNumber},
+		TxHash:      sql.NullString{Valid: true, String: payload.TxHash},
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		logger.Errorw("failed to upsert activity", "error", err)
