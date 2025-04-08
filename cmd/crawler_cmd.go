@@ -456,6 +456,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 
 	err = tx.Commit()
 	if err != nil {
+		logger.Errorw("failed to commit transaction", "error", err, "tokenID", payload.TokenID)
 		return err
 	}
 
