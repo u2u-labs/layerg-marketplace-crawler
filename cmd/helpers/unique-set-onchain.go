@@ -47,27 +47,30 @@ func (a *AddressSet) Reset() {
 
 // FOR ERC 721
 
-// TokenIdSet holds unique token IDs using a map of values
+// TokenIdSet keeps track of unique token IDs and their associated transaction data
 type TokenIdSet struct {
-	tokenIds map[string]struct{}
-	txHashes map[string]string
-	from     map[string]string
-	to       map[string]string
-	logIndex map[string]uint
+	tokenIds map[string]struct{}     // Set of unique token IDs
+	txEvents map[string][]TokenEvent // Map of token ID to its events
 }
 
-// NewTokenIdSet initializes a new TokenIdSet
+// TokenEvent stores data about a single token transfer event
+type TokenEvent struct {
+	TxHash   string
+	From     string
+	To       string
+	LogIndex uint
+}
+
+// NewTokenIdSet creates a new TokenIdSet
 func NewTokenIdSet() *TokenIdSet {
 	return &TokenIdSet{
 		tokenIds: make(map[string]struct{}),
-		txHashes: make(map[string]string),
-		from:     make(map[string]string),
-		to:       make(map[string]string),
-		logIndex: make(map[string]uint),
+		txEvents: make(map[string][]TokenEvent),
 	}
 }
 
 // AddTokenId adds a new token ID to the set if it doesn't already exist
+// and appends the transaction data to its events
 func (t *TokenIdSet) AddTokenId(tokenId *big.Int, txHash, from, to string, logIndex uint) {
 	if tokenId == nil {
 		return
@@ -76,30 +79,68 @@ func (t *TokenIdSet) AddTokenId(tokenId *big.Int, txHash, from, to string, logIn
 	// Use string representation for the token ID
 	tokenStr := tokenId.String()
 
-	if _, exists := t.tokenIds[tokenStr]; exists {
-		return
+	// Add to set of unique tokens (this doesn't change)
+	t.tokenIds[tokenStr] = struct{}{}
+
+	// Add new event to the token's event list
+	event := TokenEvent{
+		TxHash:   txHash,
+		From:     from,
+		To:       to,
+		LogIndex: logIndex,
 	}
-	t.tokenIds[tokenStr] = struct{}{} // Use an empty struct for memory efficiency
-	t.txHashes[tokenStr] = txHash
-	t.from[tokenStr] = from
-	t.to[tokenStr] = to
-	t.logIndex[tokenStr] = logIndex
+
+	t.txEvents[tokenStr] = append(t.txEvents[tokenStr], event)
 }
 
+// GetTxHash returns the transaction hash of the last event for the specified token ID
 func (t *TokenIdSet) GetTxHash(tokenId string) string {
-	return t.txHashes[tokenId]
+	events := t.txEvents[tokenId]
+	if len(events) == 0 {
+		return ""
+	}
+	return events[len(events)-1].TxHash
 }
 
+// GetFrom returns the 'from' address of the last event for the specified token ID
 func (t *TokenIdSet) GetFrom(tokenId string) string {
-	return t.from[tokenId]
+	events := t.txEvents[tokenId]
+	if len(events) == 0 {
+		return ""
+	}
+	return events[len(events)-1].From
 }
 
+// GetTo returns the 'to' address of the last event for the specified token ID
 func (t *TokenIdSet) GetTo(tokenId string) string {
-	return t.to[tokenId]
+	events := t.txEvents[tokenId]
+	if len(events) == 0 {
+		return ""
+	}
+	return events[len(events)-1].To
 }
 
+// GetLogIndex returns the log index of the last event for the specified token ID
 func (t *TokenIdSet) GetLogIndex(tokenId string) uint {
-	return t.logIndex[tokenId]
+	events := t.txEvents[tokenId]
+	if len(events) == 0 {
+		return 0
+	}
+	return events[len(events)-1].LogIndex
+}
+
+// GetAllEvents returns all events for the specified token ID
+func (t *TokenIdSet) GetAllEvents(tokenId string) []TokenEvent {
+	return t.txEvents[tokenId]
+}
+
+// GetLatestEvent returns the most recent event for the specified token ID
+func (t *TokenIdSet) GetLatestEvent(tokenId string) (TokenEvent, bool) {
+	events := t.txEvents[tokenId]
+	if len(events) == 0 {
+		return TokenEvent{}, false
+	}
+	return events[len(events)-1], true
 }
 
 // GetTokenIds returns the list of unique token IDs
@@ -113,12 +154,10 @@ func (t *TokenIdSet) GetTokenIds() []*big.Int {
 	return tokenIdList
 }
 
-// Reset clears all token IDs in the TokenIdSet
+// Reset clears all token IDs and events in the TokenIdSet
 func (t *TokenIdSet) Reset() {
-	t.tokenIds = make(map[string]struct{}) // Reinitialize the map
-	t.txHashes = make(map[string]string)   // Reinitialize the map
-	t.from = make(map[string]string)
-	t.to = make(map[string]string)
+	t.tokenIds = make(map[string]struct{})
+	t.txEvents = make(map[string][]TokenEvent)
 }
 
 // ///

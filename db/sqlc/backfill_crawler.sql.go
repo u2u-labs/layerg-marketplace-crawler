@@ -44,26 +44,31 @@ const getCrawlingBackfillCrawler = `-- name: GetCrawlingBackfillCrawler :many
 SELECT 
     bc.chain_id, bc.collection_address, bc.current_block, bc.status, bc.created_at, bc.block_scan_interval, 
     a.type, 
-    a.initial_block 
+    a.initial_block,
+    c.latest_block AS current_latest_block
 FROM 
     backfill_crawlers AS bc
 JOIN 
     assets AS a 
     ON a.chain_id = bc.chain_id 
-    AND a.collection_address = bc.collection_address 
+    AND a.collection_address = bc.collection_address
+JOIN
+    chains AS c
+    ON c.id = a.chain_id
 WHERE 
     bc.status = 'CRAWLING'
 `
 
 type GetCrawlingBackfillCrawlerRow struct {
-	ChainID           int32         `json:"chainId"`
-	CollectionAddress string        `json:"collectionAddress"`
-	CurrentBlock      int64         `json:"currentBlock"`
-	Status            CrawlerStatus `json:"status"`
-	CreatedAt         time.Time     `json:"createdAt"`
-	BlockScanInterval sql.NullInt64 `json:"blockScanInterval"`
-	Type              AssetType     `json:"type"`
-	InitialBlock      sql.NullInt64 `json:"initialBlock"`
+	ChainID            int32         `json:"chainId"`
+	CollectionAddress  string        `json:"collectionAddress"`
+	CurrentBlock       int64         `json:"currentBlock"`
+	Status             CrawlerStatus `json:"status"`
+	CreatedAt          time.Time     `json:"createdAt"`
+	BlockScanInterval  sql.NullInt64 `json:"blockScanInterval"`
+	Type               AssetType     `json:"type"`
+	InitialBlock       sql.NullInt64 `json:"initialBlock"`
+	CurrentLatestBlock int64         `json:"currentLatestBlock"`
 }
 
 func (q *Queries) GetCrawlingBackfillCrawler(ctx context.Context) ([]GetCrawlingBackfillCrawlerRow, error) {
@@ -84,6 +89,7 @@ func (q *Queries) GetCrawlingBackfillCrawler(ctx context.Context) ([]GetCrawling
 			&i.BlockScanInterval,
 			&i.Type,
 			&i.InitialBlock,
+			&i.CurrentLatestBlock,
 		); err != nil {
 			return nil, err
 		}
@@ -102,13 +108,17 @@ const getCrawlingBackfillCrawlerById = `-- name: GetCrawlingBackfillCrawlerById 
 SELECT
     bc.chain_id, bc.collection_address, bc.current_block, bc.status, bc.created_at, bc.block_scan_interval,
     a.type,
-    a.initial_block
+    a.initial_block,
+    c.latest_block AS current_latest_block
 FROM
     backfill_crawlers AS bc
         JOIN
     assets AS a
     ON a.chain_id = bc.chain_id
         AND a.collection_address = bc.collection_address
+JOIN
+        chains AS c
+ON c.id = a.chain_id
 WHERE
     bc.chain_id = $1 AND bc.collection_address = $2
 `
@@ -119,14 +129,15 @@ type GetCrawlingBackfillCrawlerByIdParams struct {
 }
 
 type GetCrawlingBackfillCrawlerByIdRow struct {
-	ChainID           int32         `json:"chainId"`
-	CollectionAddress string        `json:"collectionAddress"`
-	CurrentBlock      int64         `json:"currentBlock"`
-	Status            CrawlerStatus `json:"status"`
-	CreatedAt         time.Time     `json:"createdAt"`
-	BlockScanInterval sql.NullInt64 `json:"blockScanInterval"`
-	Type              AssetType     `json:"type"`
-	InitialBlock      sql.NullInt64 `json:"initialBlock"`
+	ChainID            int32         `json:"chainId"`
+	CollectionAddress  string        `json:"collectionAddress"`
+	CurrentBlock       int64         `json:"currentBlock"`
+	Status             CrawlerStatus `json:"status"`
+	CreatedAt          time.Time     `json:"createdAt"`
+	BlockScanInterval  sql.NullInt64 `json:"blockScanInterval"`
+	Type               AssetType     `json:"type"`
+	InitialBlock       sql.NullInt64 `json:"initialBlock"`
+	CurrentLatestBlock int64         `json:"currentLatestBlock"`
 }
 
 func (q *Queries) GetCrawlingBackfillCrawlerById(ctx context.Context, arg GetCrawlingBackfillCrawlerByIdParams) (GetCrawlingBackfillCrawlerByIdRow, error) {
@@ -141,6 +152,7 @@ func (q *Queries) GetCrawlingBackfillCrawlerById(ctx context.Context, arg GetCra
 		&i.BlockScanInterval,
 		&i.Type,
 		&i.InitialBlock,
+		&i.CurrentLatestBlock,
 	)
 	return i, err
 }
