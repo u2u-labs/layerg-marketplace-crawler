@@ -422,6 +422,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		logger.Errorw("failed to upsert activity", "error", err)
 	}
+	logger.Infow("Upserted NFT", "nft_id", payload.TokenID)
 
 	// check zero address
 	if payload.From != common.HexToAddress("0x0000000000000000000000000000000000000000").String() {
@@ -456,6 +457,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 
 	err = tx.Commit()
 	if err != nil {
+		logger.Errorw("failed to commit transaction", "error", err, "tokenID", payload.TokenID)
 		return err
 	}
 

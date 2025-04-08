@@ -421,6 +421,7 @@ func handleErc721BackFill(ctx context.Context, sugar *zap.SugaredLogger, q *db.Q
 			TxHash:    l.TxHash.Hex(),
 			Timestamp: time.Now(),
 		})
+		sugar.Infow("Added onchain transaction", "from", event.From.Hex(), "to", event.To.Hex(), "tokenId", event.TokenID.String(), "err", err)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return 0, err
 		}
@@ -532,24 +533,33 @@ func fetchTokenUriAndOwner(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 			return nil, err
 		}
 
-		// publish to redis
-		data := &types.Erc721CollectionAssetExtended{
-			Erc721CollectionAsset: &asset,
-			TxHash:                tokenIdSet.GetTxHash(asset.TokenID),
-			CollectionAddress:     contractAddress.Hex(),
-			From:                  tokenIdSet.GetFrom(asset.TokenID),
-			To:                    tokenIdSet.GetTo(asset.TokenID),
-			LogIndex:              tokenIdSet.GetLogIndex(asset.TokenID),
-		}
-		dataBytes, err := json.Marshal(data)
-		if err != nil {
-			sugar.Errorw("Failed to marshal data", "err", err)
-			continue
-		}
-		err = rdb.Publish(ctx, config.Erc721TransferEvent, dataBytes).Err()
-		if err != nil {
-			sugar.Errorw("Failed to publish to redis", "err", err)
-			continue
+		// Get all events for this token ID
+		events := tokenIdSet.GetAllEvents(tokenIdList[i/2].String())
+
+		// Process each event
+		for _, event := range events {
+			// Create data object with the current event information
+			data := &types.Erc721CollectionAssetExtended{
+				Erc721CollectionAsset: &asset,
+				TxHash:                event.TxHash,
+				CollectionAddress:     contractAddress.Hex(),
+				From:                  event.From,
+				To:                    event.To,
+				LogIndex:              event.LogIndex,
+			}
+
+			dataBytes, err := json.Marshal(data)
+			if err != nil {
+				sugar.Errorw("Failed to marshal data", "err", err)
+				continue
+			}
+
+			sugar.Infow("Publish to redis", "data", string(dataBytes))
+			err = rdb.Publish(ctx, config.Erc721TransferEvent, dataBytes).Err()
+			if err != nil {
+				sugar.Errorw("Failed to publish to redis", "err", err)
+				continue
+			}
 		}
 	}
 	return results, nil
@@ -565,7 +575,7 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 		return 0, nil
 	}
 
-	eventTransfer := make([]types.Erc1155TransferSingleEventExtended, 0)
+	transferEvents := make([]types.Erc1155TransferSingleEventExtended, 0)
 	var contractAddress *common.Address
 	for i, l := range logs {
 		contractAddress = &l.Address
@@ -601,7 +611,7 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 			// adding data to set
 			tokenIdContractAddressSet.AddTokenIdContractAddress(event.Id, event.From.Hex())
 			tokenIdContractAddressSet.AddTokenIdContractAddress(event.Id, event.To.Hex())
-			eventTransfer = append(eventTransfer, types.Erc1155TransferSingleEventExtended{
+			transferEvents = append(transferEvents, types.Erc1155TransferSingleEventExtended{
 				Erc1155TransferSingleEvent: &event,
 				TxHash:                     l.TxHash.String(),
 				AssetId:                    contractType[chain.ID][l.Address.Hex()].ID,
@@ -639,7 +649,7 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 				// adding data to set
 				tokenIdContractAddressSet.AddTokenIdContractAddress(event.Ids[i], event.From.Hex())
 				tokenIdContractAddressSet.AddTokenIdContractAddress(event.Ids[i], event.To.Hex())
-				eventTransfer = append(eventTransfer, types.Erc1155TransferSingleEventExtended{
+				transferEvents = append(transferEvents, types.Erc1155TransferSingleEventExtended{
 					Erc1155TransferSingleEvent: &utils.Erc1155TransferSingleEvent{
 						Operator: event.Operator,
 						From:     event.From,
@@ -744,7 +754,7 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 	}
 
 	go func() {
-		for _, event := range eventTransfer {
+		for _, event := range transferEvents {
 			dataBytes, err := json.Marshal(event)
 			if err != nil {
 				sugar.Errorw("Failed to marshal data", "err", err)

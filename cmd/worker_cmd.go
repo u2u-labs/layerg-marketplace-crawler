@@ -293,8 +293,8 @@ func (p *BackfillProcessor) ProcessTask(ctx context.Context, t *asynq.Task) erro
 	if (bf.CurrentBlock % blockRangeScan) != 0 {
 		toScanBlock = ((bf.CurrentBlock / blockRangeScan) + 1) * blockRangeScan
 	}
-	if bf.InitialBlock.Valid && toScanBlock >= bf.InitialBlock.Int64 {
-		toScanBlock = bf.InitialBlock.Int64
+	if bf.InitialBlock.Valid && toScanBlock >= bf.CurrentLatestBlock {
+		toScanBlock = bf.CurrentLatestBlock
 		bf.Status = dbCon.CrawlerStatusCRAWLED
 	}
 

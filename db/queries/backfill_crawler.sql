@@ -2,13 +2,17 @@
 SELECT 
     bc.*, 
     a.type, 
-    a.initial_block 
+    a.initial_block,
+    c.latest_block AS current_latest_block
 FROM 
     backfill_crawlers AS bc
 JOIN 
     assets AS a 
     ON a.chain_id = bc.chain_id 
-    AND a.collection_address = bc.collection_address 
+    AND a.collection_address = bc.collection_address
+JOIN
+    chains AS c
+    ON c.id = a.chain_id
 WHERE 
     bc.status = 'CRAWLING';
 
@@ -35,12 +39,16 @@ RETURNING *;
 SELECT
     bc.*,
     a.type,
-    a.initial_block
+    a.initial_block,
+    c.latest_block AS current_latest_block
 FROM
     backfill_crawlers AS bc
         JOIN
     assets AS a
     ON a.chain_id = bc.chain_id
         AND a.collection_address = bc.collection_address
+JOIN
+        chains AS c
+ON c.id = a.chain_id
 WHERE
     bc.chain_id = $1 AND bc.collection_address = $2;
