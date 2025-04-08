@@ -157,6 +157,8 @@ type Activity struct {
 	Price        sql.NullString `json:"price"`
 	CreatedAt    time.Time      `json:"createdAt"`
 	LogId        sql.NullString `json:"logId"`
+	BlockNumber  sql.NullString `json:"blockNumber"`
+	TxHash       sql.NullString `json:"txHash"`
 }
 
 type AnalysisCollection struct {
