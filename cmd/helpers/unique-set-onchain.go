@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -55,10 +56,11 @@ type TokenIdSet struct {
 
 // TokenEvent stores data about a single token transfer event
 type TokenEvent struct {
-	TxHash   string
-	From     string
-	To       string
-	LogIndex uint
+	TxHash      string
+	From        string
+	To          string
+	LogIndex    uint
+	BlockNumber string
 }
 
 // NewTokenIdSet creates a new TokenIdSet
@@ -71,7 +73,7 @@ func NewTokenIdSet() *TokenIdSet {
 
 // AddTokenId adds a new token ID to the set if it doesn't already exist
 // and appends the transaction data to its events
-func (t *TokenIdSet) AddTokenId(tokenId *big.Int, txHash, from, to string, logIndex uint) {
+func (t *TokenIdSet) AddTokenId(tokenId *big.Int, txHash, from, to string, logIndex uint, blockNumber uint64) {
 	if tokenId == nil {
 		return
 	}
@@ -81,13 +83,16 @@ func (t *TokenIdSet) AddTokenId(tokenId *big.Int, txHash, from, to string, logIn
 
 	// Add to set of unique tokens (this doesn't change)
 	t.tokenIds[tokenStr] = struct{}{}
+	// uint64 to string
+	blockNumberStr := strconv.FormatUint(blockNumber, 10)
 
 	// Add new event to the token's event list
 	event := TokenEvent{
-		TxHash:   txHash,
-		From:     from,
-		To:       to,
-		LogIndex: logIndex,
+		TxHash:      txHash,
+		From:        from,
+		To:          to,
+		LogIndex:    logIndex,
+		BlockNumber: blockNumberStr,
 	}
 
 	t.txEvents[tokenStr] = append(t.txEvents[tokenStr], event)

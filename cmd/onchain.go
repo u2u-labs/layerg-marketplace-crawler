@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -427,7 +428,7 @@ func handleErc721BackFill(ctx context.Context, sugar *zap.SugaredLogger, q *db.Q
 		}
 
 		// adding token Id
-		tokenIdSet.AddTokenId(event.TokenID, l.TxHash.String(), event.From.String(), event.To.String(), l.Index)
+		tokenIdSet.AddTokenId(event.TokenID, l.TxHash.String(), event.From.String(), event.To.String(), l.Index, l.BlockNumber)
 		if i > config.MaxScanLogsLimit {
 			sugar.Infow("Batch size is too big, split the batch", "total", len(logs), "batch", i)
 			scannedBlock = l.BlockNumber
@@ -546,6 +547,7 @@ func fetchTokenUriAndOwner(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 				From:                  event.From,
 				To:                    event.To,
 				LogIndex:              event.LogIndex,
+				BlockNumber:           event.BlockNumber,
 			}
 
 			dataBytes, err := json.Marshal(data)
@@ -616,6 +618,7 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 				TxHash:                     l.TxHash.String(),
 				AssetId:                    contractType[chain.ID][l.Address.Hex()].ID,
 				LogIndex:                   l.Index,
+				BlockNumber:                strconv.FormatUint(l.BlockNumber, 10),
 			})
 		}
 
@@ -657,9 +660,10 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 						Id:       event.Ids[i],
 						Value:    event.Values[i],
 					},
-					TxHash:   l.TxHash.String(),
-					AssetId:  contractType[chain.ID][l.Address.Hex()].ID,
-					LogIndex: l.Index,
+					TxHash:      l.TxHash.String(),
+					AssetId:     contractType[chain.ID][l.Address.Hex()].ID,
+					LogIndex:    l.Index,
+					BlockNumber: strconv.FormatUint(l.BlockNumber, 10),
 				})
 			}
 		}
@@ -798,7 +802,7 @@ func handleErc721Transfer(ctx context.Context, sugar *zap.SugaredLogger, q *db.Q
 	}
 
 	tokenIdSet := helpers.NewTokenIdSet()
-	tokenIdSet.AddTokenId(event.TokenID, l.TxHash.String(), event.From.String(), event.To.String(), l.Index)
+	tokenIdSet.AddTokenId(event.TokenID, l.TxHash.String(), event.From.String(), event.To.String(), l.Index, l.BlockNumber)
 	rpcClient, err := helpers.InitNewRPCClient(chain.RpcUrl)
 	if err != nil {
 		return err
@@ -984,9 +988,10 @@ func handleErc1155TransferBatch(ctx context.Context, sugar *zap.SugaredLogger, q
 				Id:       event.Ids[i],
 				Value:    event.Values[i],
 			},
-			TxHash:   l.TxHash.String(),
-			AssetId:  contractType[chain.ID][l.Address.Hex()].ID,
-			LogIndex: l.Index,
+			TxHash:      l.TxHash.String(),
+			AssetId:     contractType[chain.ID][l.Address.Hex()].ID,
+			LogIndex:    l.Index,
+			BlockNumber: strconv.FormatUint(l.BlockNumber, 10),
 		}
 		dataBytes, err := json.Marshal(data)
 		if err != nil {
@@ -1087,6 +1092,7 @@ func handleErc1155TransferSingle(ctx context.Context, sugar *zap.SugaredLogger, 
 			TxHash:                     l.TxHash.String(),
 			AssetId:                    contractType[chain.ID][l.Address.Hex()].ID,
 			LogIndex:                   l.Index,
+			BlockNumber:                strconv.FormatUint(l.BlockNumber, 10),
 		}
 		dataBytes, err := json.Marshal(data)
 		if err != nil {
@@ -1384,7 +1390,10 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 	// publish to redis queue
 	if rc != nil {
 		go func() {
-			orderBytes, _ := json.Marshal(order)
+			orderBytes, _ := json.Marshal(types.OrderEventExtended{
+				OrderAsset:  &order,
+				BlockNumber: strconv.FormatUint(l.BlockNumber, 10),
+			})
 			_ = rc.Publish(ctx, config.FillOrderChannel, orderBytes).Err()
 		}()
 	}
@@ -1434,7 +1443,10 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 	// publish to redis queue
 	if rc != nil {
 		go func() {
-			orderBytes, _ := json.Marshal(order)
+			orderBytes, _ := json.Marshal(types.OrderEventExtended{
+				OrderAsset:  &order,
+				BlockNumber: strconv.FormatUint(l.BlockNumber, 10),
+			})
 			_ = rc.Publish(ctx, config.CancelOrderChannel, orderBytes).Err()
 		}()
 	}

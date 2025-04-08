@@ -22,6 +22,7 @@ type Erc721CollectionAssetExtended struct {
 	From              string `json:"from"`
 	To                string `json:"to"`
 	LogIndex          uint   `json:"logIndex"`
+	BlockNumber       string `json:"blockNumber"`
 }
 
 type FulfillOrderEvent struct {
@@ -41,7 +42,13 @@ type FulfillOrderEvent struct {
 
 type Erc1155TransferSingleEventExtended struct {
 	*utils.Erc1155TransferSingleEvent
-	TxHash   string `json:"txHash"`
-	AssetId  string `json:"assetId"`
-	LogIndex uint   `json:"logIndex"`
+	TxHash      string `json:"txHash"`
+	AssetId     string `json:"assetId"`
+	LogIndex    uint   `json:"logIndex"`
+	BlockNumber string `json:"blockNumber"`
+}
+
+type OrderEventExtended struct {
+	*db.OrderAsset
+	BlockNumber string `json:"blockNumber"`
 }
