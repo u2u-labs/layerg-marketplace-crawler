@@ -113,7 +113,7 @@ func startCrawler(cmd *cobra.Command, args []string) {
 
 	// start consumers
 	go transferEventHandler(ctx, dbStore, sugar, rdb)
-	go fillOrderEventHandler(ctx, dbStore, sugar, rdb)
+	go exchangeEventHandler(ctx, dbStore, sugar, rdb)
 
 	timer := time.NewTimer(config.RetriveAddedChainsAndAssetsInterval)
 	defer timer.Stop()
@@ -410,7 +410,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		CollectionId: col.ID,
 		NftId:        payload.TokenID,
 		UserAddress:  strings.ToLower(payload.From),
-		Type:         "erc721_transfer",
+		Type:         config.ActivityEventTransfer,
 		Qty:          1,
 		Price:        sql.NullString{Valid: true, String: "0"},
 		CreatedAt:    time.Now(),
@@ -486,22 +486,18 @@ func subscribeToNewAsset(ctx context.Context, sugar *zap.SugaredLogger, cancel c
 	}
 }
 
-func fillOrderEventHandler(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, rdb *redis.Client) {
+func exchangeEventHandler(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, rdb *redis.Client) {
 	logger.Info("Starting fill order event handler")
 
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Errorw("Recovered from panic in fillOrderEventHandler", "error", r, "stacktrace", string(debug.Stack()))
+			logger.Errorw("Recovered from panic in exchangeEventHandler", "error", r, "stacktrace", string(debug.Stack()))
 		}
 	}()
 
-	ps := rdb.Subscribe(ctx, config.FillOrderChannel)
+	ps := rdb.Subscribe(ctx, config.FillOrderChannel, config.CancelOrderChannel)
 	defer ps.Close()
 	ch := ps.Channel()
-
-	//ps2 := rdb.Subscribe(ctx, config.CancelOrderChannel)
-	//defer ps2.Close()
-	//ch2 := ps2.Channel()
 
 	for {
 		select {
@@ -517,21 +513,25 @@ func fillOrderEventHandler(ctx context.Context, dbStore *dbCon.DBManager, logger
 				return
 			}
 
-			// Process the message
-			if err := processFillOrderEvent(ctx, dbStore, logger, msg); err != nil {
-				logger.Errorw("Error processing fill order event", "error", err)
-			}
-			//case msg, ok := <-ch2:
-			//	if !ok {
-			//		logger.Warn("Redis subscription channel closed, exiting handler")
-			//		return
-			//	}
-			//
-			//	// Process the message
-			//	if err := processCancelOrderEvent(ctx, dbStore, logger, msg); err != nil {
-			//		logger.Errorw("Error processing cancel order event", "error", err)
-			//	}
+			processExchangeMessage(ctx, dbStore, logger, msg)
 		}
+	}
+}
+
+func processExchangeMessage(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) {
+	switch msg.Channel {
+	case config.FillOrderChannel:
+		err := processFillOrderEvent(ctx, dbStore, logger, msg)
+		if err != nil {
+			logger.Errorw("Error processing fill order event", "error", err)
+		}
+	case config.CancelOrderChannel:
+		err := processCancelOrderEvent(ctx, dbStore, logger, msg)
+		if err != nil {
+			logger.Errorw("Error processing cancel order event", "error", err)
+		}
+	default:
+		logger.Warnw("Unknown channel received", "channel", msg.Channel)
 	}
 }
 
@@ -618,7 +618,7 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 		CollectionId: collection.ID,
 		NftId:        order.TakeAssetId,
 		UserAddress:  strings.ToLower(payload.Maker),
-		Type:         "fill_order",
+		Type:         config.ActivityEventFilledOrder,
 		Qty:          order.FilledQty,
 		Price:        sql.NullString{Valid: true, String: order.Price},
 		CreatedAt:    time.Now(),
@@ -669,7 +669,66 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 }
 
 func processCancelOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) error {
-	// do nothing for now
+	var payload dbCon.OrderAsset
+	if err := json.Unmarshal([]byte(msg.Payload), &payload); err != nil {
+		return fmt.Errorf("failed to unmarshal: %w", err)
+	}
+
+	tx, err := dbStore.MarketplaceDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	q := dbStore.MpQueries.WithTx(tx)
+
+	collection, err := q.GetCollectionByAddressAndChainId(ctx, dbCon.GetCollectionByAddressAndChainIdParams{
+		Address: sql.NullString{String: strings.ToLower(payload.Taker.String), Valid: true},
+		ChainId: int64(payload.ChainID),
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get collection: %w", err)
+	}
+
+	order, err := q.GetOrderBySignature(ctx, dbCon.GetOrderBySignatureParams{
+		Sig:   payload.Sig,
+		Index: payload.Index,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("order not found, sig=%s", payload.Sig)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get order: %w", err)
+	}
+
+	// upsert activity
+	err = q.UpsertActivity(ctx, dbCon.UpsertActivityParams{
+		ID:           uuid.New().String(),
+		From:         strings.ToLower(payload.Maker),
+		To:           strings.ToLower(payload.Taker.String),
+		CollectionId: collection.ID,
+		NftId:        order.TakeAssetId,
+		UserAddress:  strings.ToLower(payload.Maker),
+		Type:         config.ActivityEventCancelOrder,
+		Qty:          order.FilledQty,
+		Price:        sql.NullString{Valid: true, String: order.Price},
+		CreatedAt:    time.Now(),
+		LogId: sql.NullString{
+			String: generateUniqueLogId(payload.TxHash, collection.ID.String(), order.TakeAssetId, payload.Maker, payload.Taker.String, 0),
+			Valid:  true,
+		},
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
 }
 
@@ -762,7 +821,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 		CollectionId: col.ID,
 		NftId:        asset.TokenID,
 		UserAddress:  strings.ToLower(payload.From.String()),
-		Type:         "erc1155_transfer",
+		Type:         config.ActivityEventTransfer,
 		Qty:          int32(payload.Value.Int64()),
 		Price:        sql.NullString{Valid: true, String: "0"},
 		CreatedAt:    time.Now(),
