@@ -127,24 +127,24 @@ func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *
 			sugar.Infow("Importing block receipts", "chain", chain.Chain+" "+chain.Name, "block", i, "latest", latest)
 		}
 
-		//block, err := client.EthClient.BlockByNumber(c, big.NewInt(int64(i)))
-		//if err != nil {
-		//	sugar.Errorw("Failed to fetch latest block", "err", err, "height", i, "chain", chain)
-		//	break
-		//}
-		//receipts, err := client.EthClient.BlockReceipts(ctx, rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(i)))
-		//if err != nil {
-		//	sugar.Errorw("Failed to fetch latest block receipts", "err", err, "height", i, "chain", chain)
-		//	break
-		//}
-
-		block, receipts, err := helpers.FetchBlockAndReceipts(client.RpcClient, sugar, c, big.NewInt(i))
+		block, err := client.EthClient.BlockByNumber(c, big.NewInt(int64(i)))
 		if err != nil {
-			if !strings.Contains(err.Error(), "context deadline exceeded") {
-				sugar.Errorw("Failed to fetch latest block receipts", "err", err, "height", i, "chain", chain)
-			}
+			sugar.Errorw("Failed to fetch latest block", "err", err, "height", i, "chain", chain)
 			break
 		}
+		receipts, err := client.EthClient.BlockReceipts(ctx, rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(i)))
+		if err != nil {
+			sugar.Errorw("Failed to fetch latest block receipts", "err", err, "height", i, "chain", chain)
+			break
+		}
+
+		//block, receipts, err := helpers.FetchBlockAndReceipts(client.RpcClient, sugar, c, big.NewInt(i))
+		//if err != nil {
+		//	if !strings.Contains(err.Error(), "context deadline exceeded") {
+		//		sugar.Errorw("Failed to fetch latest block receipts", "err", err, "height", i, "chain", chain)
+		//	}
+		//	break
+		//}
 
 		if err = FilterEvents(ctx, sugar, qtx, client.EthClient, chain, rdb, receipts, block.Time()); err != nil {
 			sugar.Errorw("Failed to filter events", "err", err, "height", i, "chain", chain.ChainID)
