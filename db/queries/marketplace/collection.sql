@@ -1,7 +1,8 @@
--- name: UpdateCollectionVolume :one
+-- name: UpdateCollectionVolumeFloor :one
 UPDATE "Collection"
-SET vol = $1, "volumeWei" = $2
-WHERE "id" = $3
+SET vol = $1, "volumeWei" = $2,
+    floor = $3, "floorWei" = $4, "floorPrice" = $5
+WHERE "id" = $6
 RETURNING *;
 
 -- name: GetCollectionByAddressAndChainId :one

@@ -12,13 +12,32 @@ import (
 	"github.com/google/uuid"
 )
 
-const upsertOrderHistory = `-- name: UpsertOrderHistory :exec
-INSERT INTO "OrderHistory" (id, index, sig, nonce, "fromId", "toId", "qtyMatch", price, "priceNum", timestamp)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-ON CONFLICT ("sig", "index") DO NOTHING
+const checkOrderHistoryExists = `-- name: CheckOrderHistoryExists :one
+SELECT EXISTS (
+    SELECT 1
+    FROM "OrderHistory"
+    WHERE sig = $1 AND index = $2
+) AS exists
 `
 
-type UpsertOrderHistoryParams struct {
+type CheckOrderHistoryExistsParams struct {
+	Sig   string `json:"sig"`
+	Index int32  `json:"index"`
+}
+
+func (q *Queries) CheckOrderHistoryExists(ctx context.Context, arg CheckOrderHistoryExistsParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, checkOrderHistoryExists, arg.Sig, arg.Index)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const createOrderHistory = `-- name: CreateOrderHistory :exec
+INSERT INTO "OrderHistory" (id, index, sig, nonce, "fromId", "toId", "qtyMatch", price, "priceNum", timestamp)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+`
+
+type CreateOrderHistoryParams struct {
 	ID        uuid.UUID      `json:"id"`
 	Index     int32          `json:"index"`
 	Sig       string         `json:"sig"`
@@ -31,8 +50,8 @@ type UpsertOrderHistoryParams struct {
 	Timestamp int32          `json:"timestamp"`
 }
 
-func (q *Queries) UpsertOrderHistory(ctx context.Context, arg UpsertOrderHistoryParams) error {
-	_, err := q.db.ExecContext(ctx, upsertOrderHistory,
+func (q *Queries) CreateOrderHistory(ctx context.Context, arg CreateOrderHistoryParams) error {
+	_, err := q.db.ExecContext(ctx, createOrderHistory,
 		arg.ID,
 		arg.Index,
 		arg.Sig,

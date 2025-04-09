@@ -116,21 +116,32 @@ func (q *Queries) GetCollectionById(ctx context.Context, id uuid.UUID) (Collecti
 	return i, err
 }
 
-const updateCollectionVolume = `-- name: UpdateCollectionVolume :one
+const updateCollectionVolumeFloor = `-- name: UpdateCollectionVolumeFloor :one
 UPDATE "Collection"
-SET vol = $1, "volumeWei" = $2
-WHERE "id" = $3
+SET vol = $1, "volumeWei" = $2,
+    floor = $3, "floorWei" = $4, "floorPrice" = $5
+WHERE "id" = $6
 RETURNING id, "txCreationHash", name, "nameSlug", symbol, description, address, "shortUrl", metadata, "isU2U", status, type, "createdAt", "updatedAt", "coverImage", avatar, "projectId", "isVerified", "floorPrice", floor, "floorWei", "isActive", "flagExtend", "isSync", "subgraphUrl", "lastTimeSync", "metricPoint", "metricDetail", "metadataJson", "gameLayergId", source, vol, "volumeWei", "chainId", "totalAssets"
 `
 
-type UpdateCollectionVolumeParams struct {
-	Vol       float64   `json:"vol"`
-	VolumeWei string    `json:"volumeWei"`
-	ID        uuid.UUID `json:"id"`
+type UpdateCollectionVolumeFloorParams struct {
+	Vol        float64   `json:"vol"`
+	VolumeWei  string    `json:"volumeWei"`
+	Floor      float64   `json:"floor"`
+	FloorWei   string    `json:"floorWei"`
+	FloorPrice int64     `json:"floorPrice"`
+	ID         uuid.UUID `json:"id"`
 }
 
-func (q *Queries) UpdateCollectionVolume(ctx context.Context, arg UpdateCollectionVolumeParams) (Collection, error) {
-	row := q.db.QueryRowContext(ctx, updateCollectionVolume, arg.Vol, arg.VolumeWei, arg.ID)
+func (q *Queries) UpdateCollectionVolumeFloor(ctx context.Context, arg UpdateCollectionVolumeFloorParams) (Collection, error) {
+	row := q.db.QueryRowContext(ctx, updateCollectionVolumeFloor,
+		arg.Vol,
+		arg.VolumeWei,
+		arg.Floor,
+		arg.FloorWei,
+		arg.FloorPrice,
+		arg.ID,
+	)
 	var i Collection
 	err := row.Scan(
 		&i.ID,
