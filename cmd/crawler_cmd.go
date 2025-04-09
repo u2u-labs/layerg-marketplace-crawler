@@ -590,7 +590,7 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 	if !ok {
 		quantity = new(big.Int)
 	}
-	collection.Vol += float64(price.Uint64() * quantity.Uint64())
+	collection.Vol += order.PriceNum * float64(quantity.Uint64())
 	volumeWei, ok := new(big.Int).SetString(collection.VolumeWei, 10)
 	if !ok {
 		return fmt.Errorf("invalid volume wei")
@@ -598,11 +598,21 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 	volumeWei = volumeWei.Add(volumeWei, price.Mul(price, quantity))
 	collection.VolumeWei = volumeWei.String()
 
+	currentFloorWei, _ := new(big.Int).SetString(collection.FloorWei, 10)
+	if currentFloorWei.Cmp(price) > 0 {
+		collection.Floor = order.PriceNum
+		collection.FloorWei = price.String()
+		collection.FloorPrice = int64(order.PriceNum)
+	}
+
 	// update collection volume
-	_, err = q.UpdateCollectionVolume(ctx, dbCon.UpdateCollectionVolumeParams{
-		Vol:       collection.Vol,
-		VolumeWei: collection.VolumeWei,
-		ID:        collection.ID,
+	_, err = q.UpdateCollectionVolumeFloor(ctx, dbCon.UpdateCollectionVolumeFloorParams{
+		Vol:        collection.Vol,
+		VolumeWei:  collection.VolumeWei,
+		Floor:      collection.Floor,
+		FloorWei:   collection.FloorWei,
+		FloorPrice: collection.FloorPrice,
+		ID:         collection.ID,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("collection not found: %w", err)
@@ -659,20 +669,30 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 	}
 
 	// Now use fromUserId and toUserId in your upsert
-	err = q.UpsertOrderHistory(ctx, dbCon.UpsertOrderHistoryParams{
-		ID:        uuid.New(),
-		Index:     payload.Index,
-		Sig:       payload.Sig,
-		Nonce:     sql.NullString{Valid: true, String: payload.Nonce},
-		FromId:    fromUserId,
-		ToId:      toUserId,
-		QtyMatch:  int32(currentFilledQty),
-		Price:     order.Price,
-		PriceNum:  order.PriceNum,
-		Timestamp: int32(time.Now().Unix()),
+	exists, err := q.CheckOrderHistoryExists(ctx, dbCon.CheckOrderHistoryExistsParams{
+		Sig:   payload.Sig,
+		Index: payload.Index,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to upsert order history: %w", err)
+		return fmt.Errorf("failed to check if order history exists: %w", err)
+	}
+
+	if !exists {
+		err = q.CreateOrderHistory(ctx, dbCon.CreateOrderHistoryParams{
+			ID:        uuid.New(),
+			Index:     payload.Index,
+			Sig:       payload.Sig,
+			Nonce:     sql.NullString{Valid: true, String: payload.Nonce},
+			FromId:    fromUserId,
+			ToId:      toUserId,
+			QtyMatch:  int32(currentFilledQty),
+			Price:     order.Price,
+			PriceNum:  order.PriceNum,
+			Timestamp: int32(time.Now().Unix()),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to upsert order history: %w", err)
+		}
 	}
 
 	// upsert activity
