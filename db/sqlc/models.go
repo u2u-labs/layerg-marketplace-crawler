@@ -145,6 +145,22 @@ func (ns NullOrderStatus) Value() (driver.Value, error) {
 	return string(ns.OrderStatus), nil
 }
 
+type AAWallet struct {
+	ID             string         `json:"id"`
+	UserId         uuid.UUID      `json:"userId"`
+	Type           sql.NullString `json:"type"`
+	UaId           sql.NullString `json:"uaId"`
+	AaAddress      sql.NullString `json:"aaAddress"`
+	FactoryAddress sql.NullString `json:"factoryAddress"`
+	TelegramId     sql.NullString `json:"telegramId"`
+	FacebookId     sql.NullString `json:"facebookId"`
+	TwitterId      sql.NullString `json:"twitterId"`
+	GoogleId       sql.NullString `json:"googleId"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      sql.NullTime   `json:"updatedAt"`
+	AppKey         sql.NullString `json:"appKey"`
+}
+
 type Activity struct {
 	ID           string         `json:"id"`
 	From         string         `json:"from"`
@@ -365,7 +381,7 @@ type Order struct {
 	PriceNum         float64       `json:"priceNum"`
 	NetPrice         string        `json:"netPrice"`
 	NetPriceNum      float64       `json:"netPriceNum"`
-	CreatedAt        time.Time     `json:"createdAt"`
+	CreateAt         time.Time     `json:"createAt"`
 	UpdatedAt        sql.NullTime  `json:"updatedAt"`
 	QuoteToken       string        `json:"quoteToken"`
 	FilledQty        int32         `json:"filledQty"`
@@ -388,6 +404,19 @@ type OrderAsset struct {
 	TxHash    string         `json:"txHash"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
+}
+
+type OrderHistory struct {
+	ID        uuid.UUID      `json:"id"`
+	Index     int32          `json:"index"`
+	Sig       string         `json:"sig"`
+	Nonce     sql.NullString `json:"nonce"`
+	FromId    uuid.UUID      `json:"fromId"`
+	ToId      uuid.UUID      `json:"toId"`
+	QtyMatch  int32          `json:"qtyMatch"`
+	Price     string         `json:"price"`
+	PriceNum  float64        `json:"priceNum"`
+	Timestamp int32          `json:"timestamp"`
 }
 
 type Ownership struct {

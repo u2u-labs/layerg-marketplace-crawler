@@ -1343,7 +1343,6 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 	chain *db.Chain, rc *redis.Client, l *utypes.Log, ts uint64) error {
 
 	// Decode FillOrder log
-	// FillOrder(uint8 orderType, address maker, address taker, bytes sig, uint16 index, uint256 takeQty, uint256 takeAssetId, uint256 currentFilledValue, uint256 randomValue)
 	var event utils.FillOrderEvent
 	err := utils.EXCHANGEABI.UnpackIntoInterface(&event, "FillOrder", l.Data)
 	if err != nil {
@@ -1353,14 +1352,14 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 
 	// insert maker, taker accounts
 	_, err = q.GetOrCreateEvmAccount(ctx, event.Maker.String())
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		sugar.Errorw("Failed to get or create maker account", "err", err)
 		return err
 	}
 
 	if event.Taker.String() != "0x0000000000000000000000000000000000000000" {
 		_, err = q.GetOrCreateEvmAccount(ctx, event.Taker.String())
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			sugar.Errorw("Failed to get or create taker account", "err", err)
 			return err
 		}
@@ -1370,11 +1369,11 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 	order, err := q.CreateOrderAsset(ctx, db.CreateOrderAssetParams{
 		Maker:     event.Maker.String(),
 		Taker:     sql.NullString{String: event.Taker.String(), Valid: true},
-		Sig:       fmt.Sprintf("%x", event.Sig),
+		Sig:       fmt.Sprintf("0x%x", event.Sig),
 		Index:     int32(event.Index),
 		Status:    db.OrderStatusFILLED,
 		TakeQty:   event.TakeQty.String(),
-		FilledQty: event.FilledQty.String(),
+		FilledQty: event.CurrentFilledValue.String(),
 		Nonce:     event.RandomValue.String(),
 		Timestamp: time.Unix(int64(ts), 0),
 		Remaining: "0",
@@ -1395,6 +1394,7 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 				BlockNumber: strconv.FormatUint(l.BlockNumber, 10),
 			})
 			_ = rc.Publish(ctx, config.FillOrderChannel, orderBytes).Err()
+			sugar.Infow("Published to redis", "channel", config.FillOrderChannel, "order", order.ID)
 		}()
 	}
 
@@ -1414,7 +1414,7 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 
 	// insert maker, taker accounts
 	_, err = q.GetOrCreateEvmAccount(ctx, event.Maker.String())
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		sugar.Errorw("Failed to get or create maker account", "err", err)
 		return err
 	}
@@ -1448,6 +1448,7 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 				BlockNumber: strconv.FormatUint(l.BlockNumber, 10),
 			})
 			_ = rc.Publish(ctx, config.CancelOrderChannel, orderBytes).Err()
+			sugar.Infow("Published to redis", "channel", config.CancelOrderChannel, "order", order.ID)
 		}()
 	}
 

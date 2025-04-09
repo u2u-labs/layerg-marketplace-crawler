@@ -7,12 +7,13 @@ package db
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/lib/pq"
 )
 
 const getOrderBySignature = `-- name: GetOrderBySignature :one
-SELECT "Order".index, "Order".sig, "Order"."makerId", "Order"."makeAssetType", "Order"."makeAssetAddress", "Order"."makeAssetValue", "Order"."makeAssetId", "Order"."takerId", "Order"."takeAssetType", "Order"."takeAssetAddress", "Order"."takeAssetValue", "Order"."takeAssetId", "Order".salt, "Order".start, "Order"."end", "Order"."orderStatus", "Order"."orderType", "Order".root, "Order".proof, "Order"."tokenId", "Order"."collectionId", "Order".quantity, "Order".price, "Order"."priceNum", "Order"."netPrice", "Order"."netPriceNum", "Order"."createdAt", "Order"."updatedAt", "Order"."quoteToken", "Order"."filledQty"
+SELECT "Order".index, "Order".sig, "Order"."makerId", "Order"."makeAssetType", "Order"."makeAssetAddress", "Order"."makeAssetValue", "Order"."makeAssetId", "Order"."takerId", "Order"."takeAssetType", "Order"."takeAssetAddress", "Order"."takeAssetValue", "Order"."takeAssetId", "Order".salt, "Order".start, "Order"."end", "Order"."orderStatus", "Order"."orderType", "Order".root, "Order".proof, "Order"."tokenId", "Order"."collectionId", "Order".quantity, "Order".price, "Order"."priceNum", "Order"."netPrice", "Order"."netPriceNum", "Order"."createAt", "Order"."updatedAt", "Order"."quoteToken", "Order"."filledQty"
 FROM "Order"
     INNER JOIN "User" maker ON "Order"."makerId" = maker."id"
     LEFT JOIN "User" taker ON "Order"."takerId" = taker."id"
@@ -54,10 +55,34 @@ func (q *Queries) GetOrderBySignature(ctx context.Context, arg GetOrderBySignatu
 		&i.PriceNum,
 		&i.NetPrice,
 		&i.NetPriceNum,
-		&i.CreatedAt,
+		&i.CreateAt,
 		&i.UpdatedAt,
 		&i.QuoteToken,
 		&i.FilledQty,
 	)
 	return i, err
+}
+
+const updateOrderBySignature = `-- name: UpdateOrderBySignature :exec
+UPDATE "Order"
+SET "orderStatus" = $1,
+    "updatedAt" = coalesce($2, now())
+WHERE "sig" = $3 AND "index" = $4
+`
+
+type UpdateOrderBySignatureParams struct {
+	OrderStatus string       `json:"orderStatus"`
+	UpdatedAt   sql.NullTime `json:"updatedAt"`
+	Sig         string       `json:"sig"`
+	Index       int32        `json:"index"`
+}
+
+func (q *Queries) UpdateOrderBySignature(ctx context.Context, arg UpdateOrderBySignatureParams) error {
+	_, err := q.db.ExecContext(ctx, updateOrderBySignature,
+		arg.OrderStatus,
+		arg.UpdatedAt,
+		arg.Sig,
+		arg.Index,
+	)
+	return err
 }

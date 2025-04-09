@@ -67,6 +67,55 @@ func (q *Queries) GetCollectionByAddressAndChainId(ctx context.Context, arg GetC
 	return i, err
 }
 
+const getCollectionById = `-- name: GetCollectionById :one
+SELECT id, "txCreationHash", name, "nameSlug", symbol, description, address, "shortUrl", metadata, "isU2U", status, type, "createdAt", "updatedAt", "coverImage", avatar, "projectId", "isVerified", "floorPrice", floor, "floorWei", "isActive", "flagExtend", "isSync", "subgraphUrl", "lastTimeSync", "metricPoint", "metricDetail", "metadataJson", "gameLayergId", source, vol, "volumeWei", "chainId", "totalAssets"
+FROM "Collection"
+WHERE "id" = $1
+`
+
+func (q *Queries) GetCollectionById(ctx context.Context, id uuid.UUID) (Collection, error) {
+	row := q.db.QueryRowContext(ctx, getCollectionById, id)
+	var i Collection
+	err := row.Scan(
+		&i.ID,
+		&i.TxCreationHash,
+		&i.Name,
+		&i.NameSlug,
+		&i.Symbol,
+		&i.Description,
+		&i.Address,
+		&i.ShortUrl,
+		&i.Metadata,
+		&i.IsU2U,
+		&i.Status,
+		&i.Type,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CoverImage,
+		&i.Avatar,
+		&i.ProjectId,
+		&i.IsVerified,
+		&i.FloorPrice,
+		&i.Floor,
+		&i.FloorWei,
+		&i.IsActive,
+		&i.FlagExtend,
+		&i.IsSync,
+		&i.SubgraphUrl,
+		&i.LastTimeSync,
+		&i.MetricPoint,
+		&i.MetricDetail,
+		&i.MetadataJson,
+		&i.GameLayergId,
+		&i.Source,
+		&i.Vol,
+		&i.VolumeWei,
+		&i.ChainId,
+		&i.TotalAssets,
+	)
+	return i, err
+}
+
 const updateCollectionVolume = `-- name: UpdateCollectionVolume :one
 UPDATE "Collection"
 SET vol = $1, "volumeWei" = $2

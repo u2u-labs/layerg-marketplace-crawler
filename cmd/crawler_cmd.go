@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/big"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -561,17 +562,6 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 	defer tx.Rollback()
 	q := dbStore.MpQueries.WithTx(tx)
 
-	collection, err := q.GetCollectionByAddressAndChainId(ctx, dbCon.GetCollectionByAddressAndChainIdParams{
-		Address: sql.NullString{String: strings.ToLower(payload.Taker.String), Valid: true},
-		ChainId: int64(payload.ChainID),
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to get collection: %w", err)
-	}
-
 	order, err := q.GetOrderBySignature(ctx, dbCon.GetOrderBySignatureParams{
 		Sig:   payload.Sig,
 		Index: payload.Index,
@@ -581,6 +571,14 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 	}
 	if err != nil {
 		return fmt.Errorf("failed to get order: %w", err)
+	}
+
+	collection, err := q.GetCollectionById(ctx, order.CollectionId)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("collection not found, id=%s", order.CollectionId)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get collection: %w", err)
 	}
 
 	// update collection's volume
@@ -611,6 +609,70 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 	}
 	if err != nil {
 		return fmt.Errorf("failed to update collection volume: %w", err)
+	}
+
+	currentFilledQty, _ := strconv.ParseUint(payload.FilledQty, 10, 64)
+	if currentFilledQty >= uint64(order.Quantity) {
+		logger.Infow("Order is fully filled, updating status to FILLED")
+		// update order status to filled
+		err = q.UpdateOrderBySignature(ctx, dbCon.UpdateOrderBySignatureParams{
+			OrderStatus: "FILLED",
+			UpdatedAt:   sql.NullTime{Valid: true, Time: time.Now()},
+			Sig:         payload.Sig,
+			Index:       payload.Index,
+		})
+		if err != nil {
+			return fmt.Errorf("could not update order status, sig=%s", payload.Sig)
+		}
+	}
+
+	// For the "from" user (maker)
+	var fromUserId uuid.UUID
+	fromUser, err := q.GetAAWalletByAddress(ctx, sql.NullString{String: strings.ToLower(payload.Maker), Valid: true})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// User not found, use zero UUID
+			fromUserId = uuid.Nil // or uuid.UUID{} for zero UUID
+		} else {
+			// For other errors, return the error
+			return fmt.Errorf("failed to get maker wallet: %w", err)
+		}
+	} else {
+		// User found, use their ID
+		fromUserId = fromUser.UserId
+	}
+
+	// For the "to" user (taker)
+	var toUserId uuid.UUID
+	toUser, err := q.GetAAWalletByAddress(ctx, sql.NullString{String: strings.ToLower(payload.Taker.String), Valid: true})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// User not found, use zero UUID
+			toUserId = uuid.Nil // or uuid.UUID{} for zero UUID
+		} else {
+			// For other errors, return the error
+			return fmt.Errorf("failed to get taker wallet: %w", err)
+		}
+	} else {
+		// User found, use their ID
+		toUserId = toUser.UserId
+	}
+
+	// Now use fromUserId and toUserId in your upsert
+	err = q.UpsertOrderHistory(ctx, dbCon.UpsertOrderHistoryParams{
+		ID:        uuid.New(),
+		Index:     payload.Index,
+		Sig:       payload.Sig,
+		Nonce:     sql.NullString{Valid: true, String: payload.Nonce},
+		FromId:    fromUserId,
+		ToId:      toUserId,
+		QtyMatch:  int32(currentFilledQty),
+		Price:     order.Price,
+		PriceNum:  order.PriceNum,
+		Timestamp: int32(time.Now().Unix()),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upsert order history: %w", err)
 	}
 
 	// upsert activity
@@ -669,6 +731,7 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 		return err
 	}
 	logger.Debugw("Sent message to queue", "output", output.MessageId)
+	logger.Infow("Processed fill order event", "orderIndex", payload.Index, "orderSig", payload.Sig, "maker", payload.Maker, "taker", payload.Taker.String, "txHash", payload.TxHash)
 
 	return nil
 }
@@ -686,17 +749,6 @@ func processCancelOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logg
 	defer tx.Rollback()
 	q := dbStore.MpQueries.WithTx(tx)
 
-	collection, err := q.GetCollectionByAddressAndChainId(ctx, dbCon.GetCollectionByAddressAndChainIdParams{
-		Address: sql.NullString{String: strings.ToLower(payload.Taker.String), Valid: true},
-		ChainId: int64(payload.ChainID),
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to get collection: %w", err)
-	}
-
 	order, err := q.GetOrderBySignature(ctx, dbCon.GetOrderBySignatureParams{
 		Sig:   payload.Sig,
 		Index: payload.Index,
@@ -706,6 +758,25 @@ func processCancelOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logg
 	}
 	if err != nil {
 		return fmt.Errorf("failed to get order: %w", err)
+	}
+
+	collection, err := q.GetCollectionById(ctx, order.CollectionId)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("collection not found, id=%s", order.CollectionId)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get collection: %w", err)
+	}
+
+	// update order status to cancelled
+	err = q.UpdateOrderBySignature(ctx, dbCon.UpdateOrderBySignatureParams{
+		OrderStatus: "CANCELLED",
+		UpdatedAt:   sql.NullTime{Valid: true, Time: time.Now()},
+		Sig:         payload.Sig,
+		Index:       payload.Index,
+	})
+	if err != nil {
+		return fmt.Errorf("could not update order status, sig=%s", payload.Sig)
 	}
 
 	// upsert activity
@@ -733,9 +804,11 @@ func processCancelOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logg
 
 	err = tx.Commit()
 	if err != nil {
+		logger.Errorw("failed to commit transaction", "err", err)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	logger.Infow("Processed cancel order event", "orderIndex", payload.Index, "orderSig", payload.Sig, "maker", payload.Maker, "taker", payload.Taker.String, "txHash", payload.TxHash)
 	return nil
 }
 
