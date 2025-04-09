@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS "Order"
     "priceNum"         DOUBLE PRECISION NOT NULL DEFAULT 0,
     "netPrice"         TEXT             NOT NULL DEFAULT '0',
     "netPriceNum"      DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "createdAt"        TIMESTAMP(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createAt"        TIMESTAMP(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt"        TIMESTAMP(3),
     "quoteToken"       TEXT             NOT NULL,
     "filledQty"        INTEGER          NOT NULL DEFAULT 0,
@@ -237,6 +237,48 @@ CREATE TABLE IF NOT EXISTS "User"
     }'::JSONB,
     type            TEXT
 );
+
+create table if not exists "OrderHistory"
+(
+    id         uuid                               not null
+        primary key,
+    index      integer          default 1         not null,
+    sig        text                               not null,
+    nonce      text,
+    "fromId"   uuid                               not null
+        references "User"
+            on update cascade on delete restrict,
+    "toId"     uuid                               not null
+        references "User"
+            on update cascade on delete restrict,
+    "qtyMatch" integer          default 0         not null,
+    price      text             default '0'::text not null,
+    "priceNum" double precision default 0         not null,
+    timestamp  integer          default 0         not null,
+    foreign key (sig, index) references "Order"
+        on update cascade on delete restrict
+);
+
+create table if not exists "AAWallet"
+(
+    id               text                                   not null
+        primary key,
+    "userId"         uuid                                   not null
+        references "User"
+            on update cascade on delete restrict,
+    type             text,
+    "uaId"           text,
+    "aaAddress"      text,
+    "factoryAddress" text,
+    "telegramId"     text,
+    "facebookId"     text,
+    "twitterId"      text,
+    "googleId"       text,
+    "createdAt"      timestamp(3) default CURRENT_TIMESTAMP not null,
+    "updatedAt"      timestamp(3),
+    "appKey"         text
+);
+
 
 -- +goose StatementEnd
 

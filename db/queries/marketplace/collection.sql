@@ -9,3 +9,8 @@ SELECT *
 FROM "Collection"
 WHERE "address" ILIKE $1
   AND "chainId" = $2;
+
+-- name: GetCollectionById :one
+SELECT *
+FROM "Collection"
+WHERE "id" = $1;
