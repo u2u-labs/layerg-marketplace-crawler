@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,14 +57,14 @@ func startCrawler(cmd *cobra.Command, args []string) {
 		viper.GetString("COCKROACH_DB_URL"),
 	)
 	if err != nil {
-		sugar.Errorw("Could not connect to database", "err", err)
+		sugar.Fatalw("Could not connect to database", "err", err)
 	}
 	mkpConn, err := sql.Open(
 		viper.GetString("COCKROACH_DB_DRIVER"), // same postgres driver
 		viper.GetString("POSTGRES_DB_URL"),
 	)
 	if err != nil {
-		sugar.Errorw("Could not connect to database", "err", err)
+		sugar.Fatalw("Could not connect to database", "err", err)
 	}
 	dbStore := dbCon.NewDBManager(crawlerConn, mkpConn)
 
@@ -113,8 +112,7 @@ func startCrawler(cmd *cobra.Command, args []string) {
 	}
 
 	// start consumers
-	go transferEventHandler(ctx, dbStore, sugar, rdb)
-	go exchangeEventHandler(ctx, dbStore, sugar, rdb)
+	go startEventHandlers(ctx, dbStore, sugar, rdb)
 
 	timer := time.NewTimer(config.RetriveAddedChainsAndAssetsInterval)
 	defer timer.Stop()
@@ -284,48 +282,77 @@ func ProcessCrawlingBackfillCollection(ctx context.Context, sugar *zap.SugaredLo
 	return nil
 }
 
-func transferEventHandler(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, rdb *redis.Client) {
-	logger.Info("Starting erc721 transfer event handler")
+func startEventHandlers(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, rdb *redis.Client) {
+	logger.Info("Starting event handlers")
 
+	// Subscribe to channels
+	ps := rdb.Subscribe(ctx, config.Erc721TransferEvent, config.Erc1155TransferEvent,
+		config.FillOrderChannel, config.CancelOrderChannel)
 	defer func() {
-		if r := recover(); r != nil {
-			logger.Errorw("Recovered from panic in transferEventHandler", "error", r, "stacktrace", string(debug.Stack()))
-		}
+		ps.Close()
+		logger.Info("All event handlers shut down")
 	}()
-
-	ps := rdb.Subscribe(ctx, config.Erc721TransferEvent, config.Erc1155TransferEvent)
-	defer ps.Close()
 
 	ch := ps.Channel()
 
 	for {
 		select {
 		case <-ctx.Done():
-			// Context canceled, time to shut down
-			logger.Info("Shutting down erc721 transfer event handler due to context cancellation")
+			logger.Info("Shutting down event handlers due to context cancellation")
 			return
 
 		case msg, ok := <-ch:
-			// Channel closed or error occurred
 			if !ok {
 				logger.Warn("Redis subscription channel closed, exiting handler")
 				return
 			}
 
-			// Process the message
-			switch msg.Channel {
-			case config.Erc721TransferEvent:
-				if err := processErc721Transfer(ctx, dbStore, logger, msg); err != nil {
-					logger.Errorw("Failed to process erc721 transfer event", "error", err)
-				}
-			case config.Erc1155TransferEvent:
-				if err := processErc1155Transfer(ctx, dbStore, logger, msg); err != nil {
-					logger.Errorw("Failed to process erc1155 transfer event", "error", err)
-				}
-			default:
-				logger.Warnw("Received unexpected message channel", "channel", msg.Channel)
-			}
+			processEvent(ctx, dbStore, logger, msg, rdb)
 		}
+	}
+}
+
+func processEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message, rdb *redis.Client) {
+	processingCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	msgID := generateMessageID(msg)
+
+	// Use SetNX (Set if Not eXists) with a TTL for atomic check-and-set
+	// This ensures only one worker can claim a message ID
+	success, err := rdb.SetNX(processingCtx, "processing:"+msgID, "1", 10*time.Minute).Result()
+
+	if err != nil {
+		logger.Errorw("Failed to check/set message processing lock", "error", err)
+		return
+	}
+
+	if !success {
+		logger.Debugw("Duplicate message detected, skipping", "msgID", msgID)
+		return
+	}
+
+	var processingErr error
+
+	// Process the message based on channel type
+	switch msg.Channel {
+	case config.Erc721TransferEvent:
+		processingErr = processErc721Transfer(processingCtx, dbStore, logger, msg)
+	case config.Erc1155TransferEvent:
+		processingErr = processErc1155Transfer(processingCtx, dbStore, logger, msg)
+	case config.FillOrderChannel:
+		processingErr = processFillOrderEvent(processingCtx, dbStore, logger, msg)
+	case config.CancelOrderChannel:
+		processingErr = processCancelOrderEvent(processingCtx, dbStore, logger, msg)
+	default:
+		logger.Warnw("Received unexpected message channel", "channel", msg.Channel)
+		return
+	}
+
+	if processingErr != nil {
+		logger.Errorw("Error processing event", "channel", msg.Channel, "error", processingErr)
+		// Consider implementing retry logic here
+		return
 	}
 }
 
@@ -490,78 +517,6 @@ func subscribeToNewAsset(ctx context.Context, sugar *zap.SugaredLogger, cancel c
 	}
 }
 
-func exchangeEventHandler(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, rdb *redis.Client) {
-	logger.Info("Starting fill order event handler")
-
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Errorw("Recovered from panic in exchangeEventHandler", "error", r, "stacktrace", string(debug.Stack()))
-		}
-	}()
-
-	ps := rdb.Subscribe(ctx, config.FillOrderChannel, config.CancelOrderChannel)
-	defer ps.Close()
-	ch := ps.Channel()
-
-	for {
-		select {
-		case <-ctx.Done():
-			// Context canceled, time to shut down
-			logger.Info("Shutting down fill order event handler due to context cancellation")
-			return
-
-		case msg, ok := <-ch:
-			// Channel closed or error occurred
-			if !ok {
-				logger.Warn("Redis subscription channel closed, exiting handler")
-				return
-			}
-
-			processExchangeMessage(ctx, dbStore, logger, msg, rdb)
-		}
-	}
-}
-
-func processExchangeMessage(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message, rdb *redis.Client) {
-	msgID := generateMessageID(msg)
-
-	exists, err := rdb.SIsMember(ctx, "processed_msgs", msgID).Result()
-	if err != nil {
-		logger.Errorw("Failed to check Redis set for duplicate message", "error", err)
-		return
-	}
-
-	if exists {
-		logger.Infow("Duplicate message detected, skipping", "msgID", msgID)
-		return
-	}
-
-	switch msg.Channel {
-	case config.FillOrderChannel:
-		err := processFillOrderEvent(ctx, dbStore, logger, msg)
-		if err != nil {
-			logger.Errorw("Error processing fill order event", "error", err)
-			return
-		}
-	case config.CancelOrderChannel:
-		err := processCancelOrderEvent(ctx, dbStore, logger, msg)
-		if err != nil {
-			logger.Errorw("Error processing cancel order event", "error", err)
-			return
-		}
-	default:
-		logger.Warnw("Unknown channel received", "channel", msg.Channel)
-	}
-
-	// Add message ID to set with TTL
-	_, err = rdb.SAdd(ctx, "processed_msgs", msgID).Result()
-	if err != nil {
-		logger.Errorw("Failed to add message ID to Redis set", "error", err)
-		return
-	}
-	rdb.Expire(ctx, "processed_msgs", 10*time.Minute)
-}
-
 func generateMessageID(msg *redis.Message) string {
 	h := sha256.New()
 	h.Write([]byte(msg.Payload))
@@ -584,7 +539,7 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 	//	return fmt.Errorf("failed to get total owners: %w", err)
 	//}
 
-	tx, err := dbStore.MarketplaceDB.BeginTx(ctx, nil)
+	tx, err := dbStore.MarketplaceDB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -636,7 +591,7 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 	}
 
 	// update collection volume
-	_, err = q.UpdateCollectionVolumeFloor(ctx, dbCon.UpdateCollectionVolumeFloorParams{
+	newCol, err := q.UpdateCollectionVolumeFloor(ctx, dbCon.UpdateCollectionVolumeFloorParams{
 		Vol:        collection.Vol,
 		VolumeWei:  collection.VolumeWei,
 		Floor:      collection.Floor,
@@ -650,6 +605,7 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 	if err != nil {
 		return fmt.Errorf("failed to update collection volume: %w", err)
 	}
+	logger.Infow("Updated collection volume", "collection", newCol.ID, "volume", newCol.Vol, "order", order.Sig)
 
 	currentFilledQty, _ := strconv.ParseUint(payload.FilledQty, 10, 64)
 	if currentFilledQty >= uint64(order.Quantity) {
