@@ -1378,7 +1378,7 @@ func handleFillOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Querie
 		ChainID:   contractType[chain.ID][l.Address.Hex()].ChainID,
 		TxHash:    l.TxHash.Hex(),
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		sugar.Errorw("Failed to create order", "err", err)
 		return err
 	}
@@ -1432,7 +1432,7 @@ func handleCancelOrder(ctx context.Context, sugar *zap.SugaredLogger, q *db.Quer
 		ChainID:   contractType[chain.ID][l.Address.Hex()].ChainID,
 		TxHash:    l.TxHash.Hex(),
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		sugar.Errorw("Failed to create order", "err", err)
 		return err
 	}

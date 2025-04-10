@@ -28,6 +28,8 @@ INSERT INTO order_asset (
     $12,  -- chain_id
     $13   -- tx_hash
          )
+ON CONFLICT (asset_id, tx_hash)
+    DO UPDATE SET asset_id = order_asset.asset_id -- No actual change, just to trigger RETURNING
 RETURNING *;
 
 -- name: GetOrderAssets :many
