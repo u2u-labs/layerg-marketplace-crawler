@@ -109,9 +109,6 @@ func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *
 		return err
 	}
 
-	c, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
 	tx, err := dbConn.CrawlerDB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		sugar.Errorw("Failed to start transaction", "err", err)
@@ -127,7 +124,7 @@ func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *
 			sugar.Infow("Importing block receipts", "chain", chain.Chain+" "+chain.Name, "block", i, "latest", latest)
 		}
 
-		block, err := client.EthClient.BlockByNumber(c, big.NewInt(int64(i)))
+		block, err := client.EthClient.BlockByNumber(ctx, big.NewInt(int64(i)))
 		if err != nil {
 			sugar.Errorw("Failed to fetch latest block", "err", err, "height", i, "chain", chain)
 			break
