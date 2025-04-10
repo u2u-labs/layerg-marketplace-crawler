@@ -599,7 +599,8 @@ func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger
 	collection.VolumeWei = volumeWei.String()
 
 	currentFloorWei, _ := new(big.Int).SetString(collection.FloorWei, 10)
-	if currentFloorWei.Cmp(price) > 0 {
+	if (currentFloorWei.Sign() == 0 && price.Sign() > 0) ||
+		(price.Sign() > 0 && price.Cmp(currentFloorWei) < 0) {
 		collection.Floor = order.PriceNum
 		collection.FloorWei = price.String()
 		collection.FloorPrice = int64(order.PriceNum)
