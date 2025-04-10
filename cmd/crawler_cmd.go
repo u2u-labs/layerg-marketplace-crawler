@@ -517,26 +517,55 @@ func exchangeEventHandler(ctx context.Context, dbStore *dbCon.DBManager, logger 
 				return
 			}
 
-			processExchangeMessage(ctx, dbStore, logger, msg)
+			processExchangeMessage(ctx, dbStore, logger, msg, rdb)
 		}
 	}
 }
 
-func processExchangeMessage(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) {
+func processExchangeMessage(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message, rdb *redis.Client) {
+	msgID := generateMessageID(msg)
+
+	exists, err := rdb.SIsMember(ctx, "processed_msgs", msgID).Result()
+	if err != nil {
+		logger.Errorw("Failed to check Redis set for duplicate message", "error", err)
+		return
+	}
+
+	if exists {
+		logger.Infow("Duplicate message detected, skipping", "msgID", msgID)
+		return
+	}
+
 	switch msg.Channel {
 	case config.FillOrderChannel:
 		err := processFillOrderEvent(ctx, dbStore, logger, msg)
 		if err != nil {
 			logger.Errorw("Error processing fill order event", "error", err)
+			return
 		}
 	case config.CancelOrderChannel:
 		err := processCancelOrderEvent(ctx, dbStore, logger, msg)
 		if err != nil {
 			logger.Errorw("Error processing cancel order event", "error", err)
+			return
 		}
 	default:
 		logger.Warnw("Unknown channel received", "channel", msg.Channel)
 	}
+
+	// Add message ID to set with TTL
+	_, err = rdb.SAdd(ctx, "processed_msgs", msgID).Result()
+	if err != nil {
+		logger.Errorw("Failed to add message ID to Redis set", "error", err)
+		return
+	}
+	rdb.Expire(ctx, "processed_msgs", 10*time.Minute)
+}
+
+func generateMessageID(msg *redis.Message) string {
+	h := sha256.New()
+	h.Write([]byte(msg.Payload))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func processFillOrderEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, msg *redis.Message) error {
