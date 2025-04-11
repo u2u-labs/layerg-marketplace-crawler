@@ -48,8 +48,7 @@ func StartChainCrawler(ctx context.Context, sugar *zap.SugaredLogger, client *Ev
 			// Process new blocks
 			err := ProcessLatestBlocks(ctx, sugar, client, dbConn, chain, rdb)
 			if err != nil {
-				sugar.Errorw("Error processing latest blocks", "err", err)
-				return
+				sugar.Errorw("Error processing latest blocks", "err", err, "retry_in", fmt.Sprintf("%dms", chain.BlockTime))
 			}
 			timer.Reset(time.Duration(chain.BlockTime) * time.Millisecond)
 		}
