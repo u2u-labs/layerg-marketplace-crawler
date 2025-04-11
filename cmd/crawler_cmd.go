@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +40,7 @@ import (
 )
 
 var contractType = make(map[int32]map[string]dbCon.Asset)
+var API_MARKETPLACE_URL = ""
 
 func startCrawler(cmd *cobra.Command, args []string) {
 	var (
@@ -51,6 +54,8 @@ func startCrawler(cmd *cobra.Command, args []string) {
 	}
 	defer logger.Sync() // flushes buffer, if any
 	sugar := logger.Sugar()
+
+	API_MARKETPLACE_URL = viper.GetString("API_MARKETPLACE_URL")
 
 	crawlerConn, err := sql.Open(
 		viper.GetString("COCKROACH_DB_DRIVER"),
@@ -112,7 +117,10 @@ func startCrawler(cmd *cobra.Command, args []string) {
 	}
 
 	// start consumers
-	go startEventHandlers(ctx, dbStore, sugar, rdb)
+	go startEventHandlers(ctx, dbStore, sugar, rdb, config.Erc721TransferEvent)
+	go startEventHandlers(ctx, dbStore, sugar, rdb, config.Erc1155TransferEvent)
+	go startEventHandlers(ctx, dbStore, sugar, rdb, config.FillOrderChannel)
+	go startEventHandlers(ctx, dbStore, sugar, rdb, config.CancelOrderChannel)
 
 	timer := time.NewTimer(config.RetriveAddedChainsAndAssetsInterval)
 	defer timer.Stop()
@@ -282,12 +290,20 @@ func ProcessCrawlingBackfillCollection(ctx context.Context, sugar *zap.SugaredLo
 	return nil
 }
 
-func startEventHandlers(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, rdb *redis.Client) {
+func startEventHandlers(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.SugaredLogger, rdb *redis.Client, events ...string) {
 	logger.Info("Starting event handlers")
+	if events == nil || len(events) == 0 {
+		// default events
+		events = []string{
+			config.Erc721TransferEvent,
+			config.Erc1155TransferEvent,
+			config.FillOrderChannel,
+			config.CancelOrderChannel,
+		}
+	}
 
 	// Subscribe to channels
-	ps := rdb.Subscribe(ctx, config.Erc721TransferEvent, config.Erc1155TransferEvent,
-		config.FillOrderChannel, config.CancelOrderChannel)
+	ps := rdb.Subscribe(ctx, events...)
 	defer func() {
 		ps.Close()
 		logger.Info("All event handlers shut down")
@@ -380,6 +396,11 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 			image = attrs["image"]
 			animationUrl = attrs["animationUrl"]
 		}
+	}
+
+	// handle u2u specific collections
+	if payload.ChainID == config.U2UMainnetChainId || payload.ChainID == config.U2UTestnetChainId {
+		image, name, description, animationUrl = fetchMetadataNftU2uChain(ipfsUrl, logger, image, name, description, animationUrl)
 	}
 
 	// get collection
@@ -493,6 +514,49 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 	logger.Infow("Upserted NFT successfully", "tokenID", payload.TokenID, "collection", upsertedNft.CollectionId,
 		"chainId", payload.ChainID, "type", "721")
 	return nil
+}
+
+func fetchMetadataNftU2uChain(ipfsUrl string, logger *zap.SugaredLogger, image string, name string, description string, animationUrl string) (string, string, string, string) {
+	path := fmt.Sprintf("%s/api/common/ipfs-serve?ipfsPath=%s", API_MARKETPLACE_URL, ipfsUrl)
+	response, err := http.Get(path)
+	if err != nil {
+		// log error and continue
+		logger.Errorw("Failed to fetch IPFS image", "error", err)
+		return "", "", "", ""
+	}
+	defer response.Body.Close()
+	bodyBytes, err := io.ReadAll(response.Body)
+	if err != nil {
+		// log error and continue
+		logger.Errorw("Failed to read IPFS response", "error", err)
+		return "", "", "", ""
+	}
+	var body map[string]any
+	if err := json.Unmarshal(bodyBytes, &body); err != nil {
+		// log error and continue
+		logger.Errorw("Failed to unmarshal IPFS response", "error", err)
+		return "", "", "", ""
+	}
+	image, ok := body["image"].(string)
+	if !ok {
+		image = "" // or a default value
+	}
+
+	name, ok = body["name"].(string)
+	if !ok {
+		name = ""
+	}
+
+	description, ok = body["description"].(string)
+	if !ok {
+		description = ""
+	}
+
+	animationUrl, ok = body["animation_url"].(string)
+	if !ok {
+		animationUrl = ""
+	}
+	return image, name, description, animationUrl
 }
 
 func subscribeToNewAsset(ctx context.Context, sugar *zap.SugaredLogger, cancel context.CancelFunc, wg *sync.WaitGroup, rdb *redis.Client) {

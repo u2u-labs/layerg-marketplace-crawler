@@ -20,4 +20,7 @@ const (
 	ActivityEventTransfer    = "Transfer"
 	ActivityEventFilledOrder = "FilledOrder"
 	ActivityEventCancelOrder = "CancelOrder"
+
+	U2UTestnetChainId = 2484
+	U2UMainnetChainId = 39
 )
