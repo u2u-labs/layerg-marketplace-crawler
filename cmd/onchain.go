@@ -46,9 +46,13 @@ func StartChainCrawler(ctx context.Context, sugar *zap.SugaredLogger, client *Ev
 			return
 		case <-timer.C:
 			// Process new blocks
-			err := ProcessLatestBlocks(ctx, sugar, client, dbConn, chain, rdb)
+			caughtUp, err := ProcessLatestBlocks(ctx, sugar, client, dbConn, chain, rdb)
 			if err != nil {
 				sugar.Errorw("Error processing latest blocks", "err", err, "retry_in", fmt.Sprintf("%dms", chain.BlockTime))
+			}
+			if caughtUp {
+				timer.Reset(2 * time.Second)
+				continue
 			}
 			timer.Reset(time.Duration(chain.BlockTime) * time.Millisecond)
 		}
@@ -81,7 +85,7 @@ func AddBackfillCrawlerTask(ctx context.Context, sugar *zap.SugaredLogger, clien
 				bf.CurrentBlock = newBf.CurrentBlock
 			}
 			if newBf.Status == db.CrawlerStatusCRAWLED {
-				sugar.Info("Stopping backfill because crawler caught up to the latest block", "chain", chain, "block", bf.CurrentBlock)
+				sugar.Info("Stopping backfill because crawler has caught up to the latest block", "chain", chain, "block", bf.CurrentBlock)
 				return
 			}
 
@@ -98,20 +102,20 @@ func AddBackfillCrawlerTask(ctx context.Context, sugar *zap.SugaredLogger, clien
 	}
 }
 
-func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *EvmRPCClient, dbConn *db.DBManager, chain *db.Chain, rdb *redis.Client) error {
+func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *EvmRPCClient, dbConn *db.DBManager, chain *db.Chain, rdb *redis.Client) (bool, error) {
 	// Get latest block number with retries
 	latest, err := helpers.RetryWithBackoff(ctx, sugar, config.MaxRetriesAttempt, "fetch latest block number", func() (uint64, error) {
 		return client.EthClient.BlockNumber(ctx)
 	})
 	if err != nil {
 		sugar.Errorw("Failed to fetch latest blocks", "err", err, "chain", chain)
-		return err
+		return false, err
 	}
 
 	tx, err := dbConn.CrawlerDB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		sugar.Errorw("Failed to start transaction", "err", err)
-		return err
+		return false, err
 	}
 	defer tx.Rollback()
 
@@ -155,17 +159,21 @@ func ProcessLatestBlocks(ctx context.Context, sugar *zap.SugaredLogger, client *
 			LatestBlock: latestUpdatedBlock,
 		}); err != nil {
 			sugar.Errorw("Failed to update chain latest blocks in DB", "err", err, "chain", chain)
-			return err
+			return false, err
 		}
 		chain.LatestBlock = latestUpdatedBlock
 	}
 
 	if err = tx.Commit(); err != nil {
 		sugar.Errorw("Failed to commit transaction", "err", err)
-		return err
+		return false, err
 	}
 
-	return nil
+	if latestUpdatedBlock >= int64(latest) {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func FilterEvents(ctx context.Context, sugar *zap.SugaredLogger, q *db.Queries, client *ethclient.Client,
