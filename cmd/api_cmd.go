@@ -91,6 +91,11 @@ func serveApi(db *dbCon.Queries, rdb *redis.Client, rawDb *sql.DB, ctx context.C
 	historyController := controllers.NewHistoryController(db, rawDb, ctx, rdb)
 	backfillController := controllers.NewBackFillController(db, rawDb, ctx, rdb)
 
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "OK",
+		})
+	})
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Apply the basic authentication middleware
