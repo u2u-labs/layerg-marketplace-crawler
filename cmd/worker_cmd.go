@@ -265,6 +265,7 @@ func (p *BackfillProcessor) ProcessTask(ctx context.Context, t *asynq.Task) erro
 
 	tx, err := p.dbStore.CrawlerDB.BeginTx(ctx, nil)
 	if err != nil {
+		p.sugar.Errorw("Error starting transaction", "err", err)
 		return err
 	}
 	defer tx.Rollback()
@@ -275,6 +276,7 @@ func (p *BackfillProcessor) ProcessTask(ctx context.Context, t *asynq.Task) erro
 		CollectionAddress: bf.CollectionAddress,
 	})
 	if err != nil {
+		p.sugar.Errorw("Error getting crawling backfill crawler", "err", err)
 		return err
 	}
 
@@ -362,15 +364,14 @@ func (p *BackfillProcessor) ProcessTask(ctx context.Context, t *asynq.Task) erro
 		CurrentBlock:      bf.CurrentBlock,
 	})
 	if err != nil {
+		p.sugar.Errorw("Error updating crawling backfill crawler", "err", err)
 		return err
 	}
 	if err = tx.Commit(); err != nil {
+		p.sugar.Errorw("Error committing transaction", "err", err)
 		return err
 	}
 
-	if bf.Status == dbCon.CrawlerStatusCRAWLED {
-		return nil
-	}
 	return nil
 }
 

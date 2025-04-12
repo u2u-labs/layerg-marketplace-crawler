@@ -140,7 +140,10 @@ func startCrawler(cmd *cobra.Command, args []string) {
 			// Process new assets
 			ProcessNewChainAssets(iterCtx, sugar, rdb, dbStore)
 			// Process backfill collection
-			ProcessCrawlingBackfillCollection(iterCtx, sugar, dbStore.CrQueries, rdb, queueClient, &wg)
+			err = ProcessCrawlingBackfillCollection(iterCtx, sugar, dbStore.CrQueries, rdb, queueClient, &wg)
+			if err != nil {
+				sugar.Errorw("ProcessCrawlingBackfillCollection failed", "err", err)
+			}
 
 			subscribeToNewAsset(iterCtx, sugar, cancel, &wg, rdb)
 
@@ -344,7 +347,6 @@ func processEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.Sug
 	}
 
 	if !success {
-		logger.Debugw("Duplicate message detected, skipping", "msgID", msgID)
 		return
 	}
 
