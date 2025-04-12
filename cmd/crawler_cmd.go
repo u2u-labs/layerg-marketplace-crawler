@@ -522,40 +522,26 @@ func fetchMetadataNftU2uChain(ipfsUrl string, logger *zap.SugaredLogger, image s
 	if err != nil {
 		// log error and continue
 		logger.Errorw("Failed to fetch IPFS image", "error", err)
-		return "", "", "", ""
+		return image, name, description, animationUrl
 	}
 	defer response.Body.Close()
 	bodyBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		// log error and continue
 		logger.Errorw("Failed to read IPFS response", "error", err)
-		return "", "", "", ""
+		return image, name, description, animationUrl
 	}
 	var body map[string]any
 	if err := json.Unmarshal(bodyBytes, &body); err != nil {
 		// log error and continue
 		logger.Errorw("Failed to unmarshal IPFS response", "error", err)
-		return "", "", "", ""
+		return image, name, description, animationUrl
 	}
-	image, ok := body["image"].(string)
-	if !ok {
-		image = "" // or a default value
-	}
+	image, _ = body["image"].(string)
+	name, _ = body["name"].(string)
+	description, _ = body["description"].(string)
+	animationUrl, _ = body["animation_url"].(string)
 
-	name, ok = body["name"].(string)
-	if !ok {
-		name = ""
-	}
-
-	description, ok = body["description"].(string)
-	if !ok {
-		description = ""
-	}
-
-	animationUrl, ok = body["animation_url"].(string)
-	if !ok {
-		animationUrl = ""
-	}
 	return image, name, description, animationUrl
 }
 
@@ -920,6 +906,11 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 			image = attrs["image"]
 			animationUrl = attrs["animationUrl"]
 		}
+	}
+
+	// handle u2u specific collections
+	if asset.ChainID_2 == config.U2UMainnetChainId || asset.ChainID_2 == config.U2UTestnetChainId {
+		image, name, description, animationUrl = fetchMetadataNftU2uChain(ipfsUrl, logger, image, name, description, animationUrl)
 	}
 
 	// get collection
