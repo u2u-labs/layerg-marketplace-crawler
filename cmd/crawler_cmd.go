@@ -336,7 +336,7 @@ func processEvent(ctx context.Context, dbStore *dbCon.DBManager, logger *zap.Sug
 
 	// Use SetNX (Set if Not eXists) with a TTL for atomic check-and-set
 	// This ensures only one worker can claim a message ID
-	success, err := rdb.SetNX(processingCtx, "processing:"+msgID, "1", 10*time.Minute).Result()
+	success, err := rdb.SetNX(processingCtx, fmt.Sprintf("%s:processing:%s", msg.Channel, msgID), "1", 10*time.Minute).Result()
 
 	if err != nil {
 		logger.Errorw("Failed to check/set message processing lock", "error", err)
@@ -537,6 +537,12 @@ func fetchMetadataNftU2uChain(ipfsUrl string, logger *zap.SugaredLogger, image s
 		logger.Errorw("Failed to unmarshal IPFS response", "error", err)
 		return image, name, description, animationUrl
 	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusBadRequest {
+		// log error and continue
+		logger.Errorw("Failed to fetch IPFS image", "status", response.StatusCode, "response", string(bodyBytes))
+		return image, name, description, animationUrl
+	}
+
 	image, _ = body["image"].(string)
 	name, _ = body["name"].(string)
 	description, _ = body["description"].(string)
@@ -1063,7 +1069,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	logger.Infow("Upserted NFT successfully", "tokenID", asset.TokenID, "collection", upsertedNft.CollectionId,
+	logger.Infow("Upserted 1155 NFT successfully", "tokenID", asset.TokenID, "collection", upsertedNft.CollectionId,
 		"chainId", asset.ChainID_2, "type", "1155")
 	return nil
 }
