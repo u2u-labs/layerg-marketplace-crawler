@@ -448,6 +448,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", col.Symbol, slugId)},
 		Source:         sql.NullString{Valid: true, String: "crawler"},
 		OwnerId:        payload.Owner,
+		TotalSupply:    sql.NullInt32{Valid: true, Int32: 1},
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("failed to upsert NFT: %w", err)
@@ -957,6 +958,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", col.Symbol, slugId)},
 		Source:         sql.NullString{Valid: true, String: "crawler"},
 		OwnerId:        asset.Owner,
+		TotalSupply:    sql.NullInt32{Valid: true, Int32: int32(payload.Value.Int64())},
 	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("failed to upsert NFT: %w", err)

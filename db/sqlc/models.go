@@ -339,6 +339,7 @@ type NFT struct {
 	Source         sql.NullString  `json:"source"`
 	OwnerId        string          `json:"ownerId"`
 	Slug           sql.NullString  `json:"slug"`
+	TotalSupply    sql.NullInt32   `json:"totalSupply"`
 }
 
 type OnchainHistory struct {

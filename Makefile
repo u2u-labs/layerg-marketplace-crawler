@@ -49,7 +49,7 @@ migrate-up-marketplace: create-db-marketplace
 	@echo "Checking and upserting default record in goose_db_version..."
 	@echo "migrate up marketplace $(GOOSE_MKP_DBSTRING) $(GOOSE_MKP_MIGRATION_DIR)"
 	@psql $(GOOSE_MKP_DBSTRING) -c "INSERT INTO \"goose_db_version\" (id, version_id, is_applied, tstamp) VALUES (0, 0, true, now()) ON CONFLICT (id) DO NOTHING;" || true
-	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_MKP_DBSTRING) goose -dir $(GOOSE_MKP_MIGRATION_DIR) up-to 20250305083624
+	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_MKP_DBSTRING) goose -dir $(GOOSE_MKP_MIGRATION_DIR) up
 migrate-down-marketplace:
 	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_MKP_DBSTRING) goose -dir $(GOOSE_MKP_MIGRATION_DIR) down
 migrate-reset-marketplace:
