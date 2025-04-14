@@ -16,10 +16,10 @@ import (
 const upsertNFT = `-- name: UpsertNFT :one
 INSERT INTO "NFT" ("id", name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash",
                    "creatorId", "collectionId", image, description, "animationUrl",
-                   "nameSlug", source, "ownerId", "slug")
+                   "nameSlug", source, "ownerId", "slug", "totalSupply")
 VALUES ($1, $2, $3, $4, $5, $6, $7,
         $8, $9, $10, $11, $12, $13,
-        $14, $15, $16)
+        $14, $15, $16, $17)
 ON CONFLICT ("id", "collectionId")
     DO UPDATE SET name             = EXCLUDED.name,
                   "updatedAt"      = CURRENT_TIMESTAMP,
@@ -29,7 +29,7 @@ ON CONFLICT ("id", "collectionId")
                   description      = EXCLUDED.description,
                   "animationUrl"   = EXCLUDED."animationUrl",
                   "ownerId"        = EXCLUDED."ownerId"
-RETURNING id, name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash", "creatorId", "collectionId", image, "isActive", description, "animationUrl", "nameSlug", "metricPoint", "metricDetail", source, "ownerId", slug
+RETURNING id, name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash", "creatorId", "collectionId", image, "isActive", description, "animationUrl", "nameSlug", "metricPoint", "metricDetail", source, "ownerId", slug, "totalSupply"
 `
 
 type UpsertNFTParams struct {
@@ -49,6 +49,7 @@ type UpsertNFTParams struct {
 	Source         sql.NullString `json:"source"`
 	OwnerId        string         `json:"ownerId"`
 	Slug           sql.NullString `json:"slug"`
+	TotalSupply    sql.NullInt32  `json:"totalSupply"`
 }
 
 func (q *Queries) UpsertNFT(ctx context.Context, arg UpsertNFTParams) (NFT, error) {
@@ -69,6 +70,7 @@ func (q *Queries) UpsertNFT(ctx context.Context, arg UpsertNFTParams) (NFT, erro
 		arg.Source,
 		arg.OwnerId,
 		arg.Slug,
+		arg.TotalSupply,
 	)
 	var i NFT
 	err := row.Scan(
@@ -91,6 +93,7 @@ func (q *Queries) UpsertNFT(ctx context.Context, arg UpsertNFTParams) (NFT, erro
 		&i.Source,
 		&i.OwnerId,
 		&i.Slug,
+		&i.TotalSupply,
 	)
 	return i, err
 }
