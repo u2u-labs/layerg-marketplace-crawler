@@ -520,7 +520,11 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 }
 
 func fetchMetadataNftU2uChain(ipfsUrl string, logger *zap.SugaredLogger, image string, name string, description string, animationUrl string) (string, string, string, string) {
-	path := fmt.Sprintf("%s/api/common/ipfs-serve?ipfsPath=%s", API_MARKETPLACE_URL, ipfsUrl)
+	path := ipfsUrl
+	if strings.HasPrefix(ipfsUrl, "ipfs://") {
+		path = fmt.Sprintf("%s/api/common/ipfs-serve?ipfsPath=%s", API_MARKETPLACE_URL, ipfsUrl)
+	}
+
 	response, err := http.Get(path)
 	if err != nil {
 		// log error and continue
