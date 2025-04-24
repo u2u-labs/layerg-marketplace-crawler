@@ -427,7 +427,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 	if name == "" {
 		name = fmt.Sprintf("%s#%s", col.Symbol, payload.TokenID)
 	}
-	name = removeSpecialCharsAndSpaces(name)
+	nameSlug := removeSpecialCharsAndSpaces(name)
 
 	tx, err := dbStore.MarketplaceDB.BeginTx(ctx, nil)
 	if err != nil {
@@ -440,7 +440,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 	// upsert nft to layerg marketplace db
 	upsertedNft, err := q.UpsertNFT(ctx, dbCon.UpsertNFTParams{
 		ID:             payload.TokenID,
-		Name:           fmt.Sprintf("%s#%s", col.Symbol, payload.TokenID),
+		Name:           name,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 		Status:         "SUCCESS",
@@ -451,8 +451,8 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		Image:          sql.NullString{Valid: true, String: image},
 		Description:    sql.NullString{Valid: true, String: description},
 		AnimationUrl:   sql.NullString{Valid: true, String: animationUrl},
-		NameSlug:       sql.NullString{Valid: true, String: name},
-		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", col.Symbol, slugId)},
+		NameSlug:       sql.NullString{Valid: true, String: nameSlug},
+		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", nameSlug, slugId)},
 		Source:         sql.NullString{Valid: true, String: "crawler"},
 		OwnerId:        payload.Owner,
 		TotalSupply:    sql.NullInt32{Valid: true, Int32: 1},
@@ -948,7 +948,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 	if name == "" {
 		name = fmt.Sprintf("%s#%s", col.Symbol, asset.TokenID)
 	}
-	name = removeSpecialCharsAndSpaces(name)
+	nameSlug := removeSpecialCharsAndSpaces(name)
 
 	slugId, err := gonanoid.New(8)
 	if err != nil {
@@ -959,7 +959,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 	// upsert nft to layerg marketplace db
 	upsertedNft, err := dbStore.MpQueries.UpsertNFT(ctx, dbCon.UpsertNFTParams{
 		ID:             asset.TokenID,
-		Name:           fmt.Sprintf("%s#%s", col.Symbol, asset.TokenID),
+		Name:           name,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 		Status:         "SUCCESS",
@@ -970,8 +970,8 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 		Image:          sql.NullString{Valid: true, String: image},
 		Description:    sql.NullString{Valid: true, String: description},
 		AnimationUrl:   sql.NullString{Valid: true, String: animationUrl},
-		NameSlug:       sql.NullString{Valid: true, String: name},
-		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", col.Symbol, slugId)},
+		NameSlug:       sql.NullString{Valid: true, String: nameSlug},
+		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", nameSlug, slugId)},
 		Source:         sql.NullString{Valid: true, String: "crawler"},
 		OwnerId:        asset.Owner,
 		TotalSupply:    sql.NullInt32{Valid: true, Int32: int32(payload.Value.Int64())},
@@ -1107,5 +1107,5 @@ func removeSpecialCharsAndSpaces(input string) string {
 			}
 		}
 	}
-	return b.String()
+	return strings.ToLower(b.String())
 }

@@ -29,7 +29,8 @@ ON CONFLICT ("id", "collectionId")
                   description    = EXCLUDED.description,
                   "animationUrl" = EXCLUDED."animationUrl",
                   "ownerId"      = EXCLUDED."ownerId",
-                  "nameSlug"     = EXCLUDED."nameSlug"
+                  "nameSlug"     = EXCLUDED."nameSlug",
+                  "slug"         = EXCLUDED."slug"
 RETURNING id, name, "createdAt", "updatedAt", status, "tokenUri", "txCreationHash", "creatorId", "collectionId", image, "isActive", description, "animationUrl", "nameSlug", "metricPoint", "metricDetail", source, "ownerId", slug, "totalSupply"
 `
 
