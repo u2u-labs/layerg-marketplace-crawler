@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -28,6 +29,7 @@ import (
 	"github.com/u2u-labs/layerg-crawler/cmd/libs"
 	"github.com/u2u-labs/layerg-crawler/cmd/types"
 	"github.com/u2u-labs/layerg-crawler/config"
+	"golang.org/x/text/unicode/norm"
 
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
@@ -422,6 +424,11 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		return err
 	}
 
+	if name == "" {
+		name = fmt.Sprintf("%s#%s", col.Symbol, payload.TokenID)
+	}
+	nameSlug := removeSpecialCharsAndSpaces(name)
+
 	tx, err := dbStore.MarketplaceDB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -433,7 +440,7 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 	// upsert nft to layerg marketplace db
 	upsertedNft, err := q.UpsertNFT(ctx, dbCon.UpsertNFTParams{
 		ID:             payload.TokenID,
-		Name:           fmt.Sprintf("%s#%s", col.Symbol, payload.TokenID),
+		Name:           name,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 		Status:         "SUCCESS",
@@ -444,8 +451,8 @@ func processErc721Transfer(ctx context.Context, dbStore *dbCon.DBManager, logger
 		Image:          sql.NullString{Valid: true, String: image},
 		Description:    sql.NullString{Valid: true, String: description},
 		AnimationUrl:   sql.NullString{Valid: true, String: animationUrl},
-		NameSlug:       sql.NullString{Valid: true, String: name},
-		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", col.Symbol, slugId)},
+		NameSlug:       sql.NullString{Valid: true, String: nameSlug},
+		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", nameSlug, slugId)},
 		Source:         sql.NullString{Valid: true, String: "crawler"},
 		OwnerId:        payload.Owner,
 		TotalSupply:    sql.NullInt32{Valid: true, Int32: 1},
@@ -938,6 +945,11 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 		return err
 	}
 
+	if name == "" {
+		name = fmt.Sprintf("%s#%s", col.Symbol, asset.TokenID)
+	}
+	nameSlug := removeSpecialCharsAndSpaces(name)
+
 	slugId, err := gonanoid.New(8)
 	if err != nil {
 		return err
@@ -947,7 +959,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 	// upsert nft to layerg marketplace db
 	upsertedNft, err := dbStore.MpQueries.UpsertNFT(ctx, dbCon.UpsertNFTParams{
 		ID:             asset.TokenID,
-		Name:           fmt.Sprintf("%s#%s", col.Symbol, asset.TokenID),
+		Name:           name,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 		Status:         "SUCCESS",
@@ -958,8 +970,8 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 		Image:          sql.NullString{Valid: true, String: image},
 		Description:    sql.NullString{Valid: true, String: description},
 		AnimationUrl:   sql.NullString{Valid: true, String: animationUrl},
-		NameSlug:       sql.NullString{Valid: true, String: name},
-		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", col.Symbol, slugId)},
+		NameSlug:       sql.NullString{Valid: true, String: nameSlug},
+		Slug:           sql.NullString{Valid: true, String: fmt.Sprintf("%s-%s", nameSlug, slugId)},
 		Source:         sql.NullString{Valid: true, String: "crawler"},
 		OwnerId:        asset.Owner,
 		TotalSupply:    sql.NullInt32{Valid: true, Int32: int32(payload.Value.Int64())},
@@ -1080,4 +1092,20 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 	logger.Infow("Upserted 1155 NFT successfully", "tokenID", asset.TokenID, "collection", upsertedNft.CollectionId,
 		"chainId", asset.ChainID_2, "type", "1155")
 	return nil
+}
+
+func removeSpecialCharsAndSpaces(input string) string {
+	// Normalize to decomposed form (NFD)
+	t := norm.NFD.String(input)
+
+	// Remove all non-ASCII or non-letter/digit characters
+	var b strings.Builder
+	for _, r := range t {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if r <= unicode.MaxASCII {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return strings.ToLower(b.String())
 }
