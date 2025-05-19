@@ -202,6 +202,11 @@ func (as *AssetService) DeleteAssetCollection(ctx *gin.Context) {
 		return
 	}
 
+	err = q.DeleteOnchainHistoriesByAssetId(ctx, assetId)
+	if err != nil {
+		response.ErrorResponseData(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
 	err = q.Delete20AssetByAssetId(ctx, assetId)
 	if err != nil {
 		response.ErrorResponseData(ctx, http.StatusInternalServerError, err.Error())
