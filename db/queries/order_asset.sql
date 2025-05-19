@@ -43,3 +43,6 @@ SELECT * FROM order_asset WHERE tx_hash = $1 AND chain_id = $2;
 
 -- name: GetOrderAssetByAssetId :one
 SELECT * FROM order_asset WHERE asset_id = $1;
+
+-- name: DeleteOrderAssetByAssetId :exec
+DELETE FROM order_asset WHERE asset_id = $1;

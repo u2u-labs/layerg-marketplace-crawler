@@ -125,7 +125,7 @@ func SetPendingAssetToCache(ctx context.Context, rdb *redis.Client, asset db.Ass
 	if err != nil {
 		return err
 	}
-	err = rdb.LPush(ctx, PendingAssetKey(), string(jsonAsset), 0).Err()
+	err = rdb.LPush(ctx, PendingAssetKey(), string(jsonAsset)).Err()
 	if err != nil {
 		return err
 	}
@@ -134,6 +134,17 @@ func SetPendingAssetToCache(ctx context.Context, rdb *redis.Client, asset db.Ass
 
 func DeletePendingAssetsInCache(ctx context.Context, rdb *redis.Client) error {
 	return rdb.Del(ctx, PendingAssetKey()).Err()
+}
+
+func DeletePendingAssetInCache(ctx context.Context, rdb *redis.Client, targetAsset db.Asset) error {
+	// Convert the target asset to JSON string (must match exactly what was stored)
+	jsonAsset, err := json.Marshal(targetAsset)
+	if err != nil {
+		return err
+	}
+
+	err = rdb.LRem(ctx, PendingAssetKey(), 0, string(jsonAsset)).Err()
+	return err
 }
 
 func GetCachedPendingChain(ctx context.Context, rdb *redis.Client) ([]db.Chain, error) {

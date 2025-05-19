@@ -108,6 +108,7 @@ func serveApi(db *dbCon.Queries, rdb *redis.Client, rawDb *sql.DB, ctx context.C
 	// Asset routes
 	router.POST("/chain/:chain_id/collection", assetController.AddAssetCollection)
 	router.GET("/chain/:chain_id/collection", assetController.GetAssetCollection)
+	router.DELETE("/chain/:chain_id/collection", assetController.DeleteAssetCollection)
 	router.GET("/chain/:chain_id/collection/:collection_address/assets", assetController.GetAssetByChainIdAndContractAddress)
 	router.GET("/chain/:chain_id/collection/:collection_address/:token_id", assetController.GetAssetByChainIdAndContractAddressDetail)
 	router.GET("/chain/:chain_id/nft-assets", assetController.GetNFTCombinedAsset)

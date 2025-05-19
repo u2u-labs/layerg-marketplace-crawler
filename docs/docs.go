@@ -289,6 +289,34 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {}
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Delete an asset collection",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "asset"
+                ],
+                "summary": "Delete an asset collection",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain Id",
+                        "name": "chain_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
             }
         },
         "/chain/{chain_id}/collection/{collection_address}/assets": {
@@ -482,18 +510,7 @@ const docTemplate = `{
     },
     "definitions": {
         "db.AddBackfillCrawlerParams": {
-            "type": "object",
-            "properties": {
-                "chainId": {
-                    "type": "integer"
-                },
-                "collectionAddress": {
-                    "type": "string"
-                },
-                "currentBlock": {
-                    "type": "integer"
-                }
-            }
+            "type": "object"
         },
         "db.AddChainParams": {
             "type": "object",
