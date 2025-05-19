@@ -1,12 +1,5 @@
 definitions:
   db.AddBackfillCrawlerParams:
-    properties:
-      chainId:
-        type: integer
-      collectionAddress:
-        type: string
-      currentBlock:
-        type: integer
     type: object
   db.AddChainParams:
     properties:
@@ -151,6 +144,24 @@ paths:
       tags:
       - chains
   /chain/{chain_id}/collection:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an asset collection
+      parameters:
+      - description: Chain Id
+        in: path
+        name: chain_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Delete an asset collection
+      tags:
+      - asset
     get:
       consumes:
       - application/json

@@ -82,3 +82,8 @@ WHERE
     asset_id = $1
   AND token_id = $2;
 
+-- name: Delete1155AssetByAssetId :exec
+DELETE
+FROM erc_1155_collection_assets
+WHERE
+    asset_id = $1;
