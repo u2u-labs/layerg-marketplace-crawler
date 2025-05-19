@@ -174,6 +174,82 @@ func (as *AssetService) GetAssetCollectionByChainIdAndContractAddress(ctx *gin.C
 	response.SuccessReponseData(ctx, http.StatusOK, utils.ConvertAssetToAssetResponse(assetCollection))
 }
 
+func (as *AssetService) DeleteAssetCollection(ctx *gin.Context) {
+	chainIdStr := ctx.Param("chain_id")
+	var body struct {
+		CollectionAddress string `json:"collectionAddress"`
+	}
+	if err := ctx.BindJSON(&body); err != nil {
+		response.ErrorResponseData(ctx, http.StatusBadRequest, err.Error())
+		return
+	}
+	tx, err := as.rawDb.BeginTx(ctx, nil)
+	if err != nil {
+		response.ErrorResponseData(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer tx.Rollback()
+	q := as.db.WithTx(tx)
+	assetId := chainIdStr + ":" + body.CollectionAddress
+
+	assetCollection, err := q.GetAssetById(ctx, assetId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.ErrorResponseData(ctx, http.StatusNotFound, "Failed to retrieve asset collection with this contract address in the chain")
+			return
+		}
+		response.ErrorResponseData(ctx, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	err = q.Delete20AssetByAssetId(ctx, assetId)
+	if err != nil {
+		response.ErrorResponseData(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+	err = q.Delete721AssetByAssetId(ctx, assetId)
+	if err != nil {
+		response.ErrorResponseData(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+	err = q.Delete1155AssetByAssetId(ctx, assetId)
+	if err != nil {
+		response.ErrorResponseData(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+	err = q.DeleteOrderAssetByAssetId(ctx, assetId)
+	if err != nil {
+		response.ErrorResponseData(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	err = q.DeleteAsset(ctx, assetId)
+	if err != nil {
+		response.ErrorResponseData(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err = rdb.DeletePendingAssetInCache(as.ctx, as.rdb, assetCollection); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		response.ErrorResponseData(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.SuccessReponseData(ctx, http.StatusOK, utils.ConvertAssetToAssetResponse(assetCollection))
+
+	go func() {
+		jsonBytes, err := json.Marshal(assetCollection)
+		if err != nil {
+			fmt.Println("Error marshaling asset:", err)
+			return
+		}
+		_ = as.rdb.Publish(as.ctx, config.NewAssetChannel, jsonBytes).Err()
+	}()
+}
+
 func (as *AssetService) GetAssetsFromAssetCollectionId(ctx *gin.Context, assetId string) {
 	assetCollection, err := as.db.GetAssetById(ctx, assetId)
 	if err != nil {

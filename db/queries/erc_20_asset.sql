@@ -51,3 +51,9 @@ DELETE
 FROM erc_20_collection_assets
 WHERE
     id = $1;
+
+-- name: Delete20AssetByAssetId :exec
+DELETE
+FROM erc_20_collection_assets
+WHERE
+    asset_id = $1;

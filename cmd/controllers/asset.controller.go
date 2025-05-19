@@ -59,6 +59,19 @@ func (ac *AssetController) GetAssetCollection(ctx *gin.Context) {
 
 }
 
+// DeleteAssetCollection godoc
+// @Summary      Delete an asset collection
+// @Description  Delete an asset collection
+// @Tags         asset
+// @Accept       json
+// @Produce      json
+// @Security     ApiKeyAuth
+// @Param chain_id path string true "Chain Id"
+// @Router       /chain/{chain_id}/collection [delete]
+func (ac *AssetController) DeleteAssetCollection(ctx *gin.Context) {
+	ac.service.DeleteAssetCollection(ctx)
+}
+
 // GetAssetCollectionAByChainIdAndContractAddress godoc
 // @Summary      Get all asset collection of the chain
 // @Description  Get all asset collection of the chain
