@@ -54,6 +54,15 @@ func (q *Queries) AddOnchainTransaction(ctx context.Context, arg AddOnchainTrans
 	return i, err
 }
 
+const deleteOnchainHistoriesByAssetId = `-- name: DeleteOnchainHistoriesByAssetId :exec
+DELETE FROM onchain_histories WHERE asset_id = $1
+`
+
+func (q *Queries) DeleteOnchainHistoriesByAssetId(ctx context.Context, assetID string) error {
+	_, err := q.db.ExecContext(ctx, deleteOnchainHistoriesByAssetId, assetID)
+	return err
+}
+
 const getOnchainHistoriesByTxHash = `-- name: GetOnchainHistoriesByTxHash :many
 SELECT id, "from", "to", asset_id, token_id, tx_hash, timestamp, created_at, updated_at, amount FROM onchain_histories WHERE tx_hash = $1
 `

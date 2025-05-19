@@ -8,3 +8,6 @@ VALUES (
 
 -- name: GetOnchainHistoriesByTxHash :many
 SELECT * FROM onchain_histories WHERE tx_hash = $1;
+
+-- name: DeleteOnchainHistoriesByAssetId :exec
+DELETE FROM onchain_histories WHERE asset_id = $1;
