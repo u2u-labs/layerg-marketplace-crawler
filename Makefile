@@ -39,7 +39,7 @@ create-db-marketplace:
 
 migrate-up: create-db migrate-up-marketplace
 	@echo "migrate up crawler $(GOOSE_DBSTRING) $(GOOSE_MIGRATION_DIR)"
-	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_DBSTRING) goose -dir $(GOOSE_MIGRATION_DIR) up-to 20250410023759
+	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_DBSTRING) goose -dir $(GOOSE_MIGRATION_DIR) up
 migrate-down:
 	@GOOSE_DRIVER=$(GOOSE_DRIVER) GOOSE_DBSTRING=$(GOOSE_DBSTRING) goose -dir $(GOOSE_MIGRATION_DIR) down
 migrate-reset:
