@@ -752,6 +752,7 @@ func handleErc1155Backfill(ctx context.Context, sugar *zap.SugaredLogger, q *db.
 			ChainID: chain.ID,
 			TokenID: tokenIdList[i/2].TokenId.String(),
 			Owner:   tokenIdList[i/2].ContractAddress,
+			Balance: balance.String(),
 			Attributes: sql.NullString{
 				String: uri,
 				Valid:  true,
