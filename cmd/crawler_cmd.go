@@ -1022,7 +1022,7 @@ func processErc1155Transfer(ctx context.Context, dbStore *dbCon.DBManager, logge
 	}
 
 	toBalance, err2 := q.GetOwnershipByUserAddressAndCollectionId(ctx, dbCon.GetOwnershipByUserAddressAndCollectionIdParams{
-		UserAddress:  strings.ToLower(payload.From.String()),
+		UserAddress:  strings.ToLower(payload.To.String()),
 		CollectionId: uuid.NullUUID{Valid: true, UUID: col.ID},
 		NftId:        sql.NullString{Valid: true, String: asset.TokenID},
 	})
